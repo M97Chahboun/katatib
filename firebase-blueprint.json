@@ -1,0 +1,86 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Represents a user of the Katatib platform (either a traveler, center host, or administrator)",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique Firebase Auth UID" },
+        "displayName": { "type": "string", "description": "The display name of the user" },
+        "email": { "type": "string", "description": "The verified email of the user" },
+        "role": { "type": "string", "enum": ["traveler", "host", "admin"], "description": "The system role" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp" }
+      },
+      "required": ["uid", "displayName", "email", "role", "createdAt", "updatedAt"]
+    },
+    "TahfidCenter": {
+      "title": "TahfidCenter",
+      "description": "Represents a local Quran memorization circle or center welcoming travelers",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique document ID" },
+        "name": { "type": "string", "description": "Name of the Tahfid center / circle" },
+        "description": { "type": "string", "description": "Detailed description of the circle, teachers, and environment" },
+        "lat": { "type": "number", "description": "Latitude coordinate for map plotting" },
+        "lng": { "type": "number", "description": "Longitude coordinate for map plotting" },
+        "address": { "type": "string", "description": "Physical address" },
+        "city": { "type": "string", "description": "City where center is located" },
+        "country": { "type": "string", "description": "Country where center is located" },
+        "dropInWelcomed": { "type": "boolean", "description": "Highlights whether they accept temporary drop-in visitors without formal paperwork" },
+        "gender": { "type": "string", "enum": ["men", "women", "boys", "girls", "mixed"], "description": "Target audience of the center" },
+        "ageGroups": { "type": "array", "description": "List of age groups welcomed, e.g. children, youth, adults" },
+        "languages": { "type": "array", "description": "List of spoken languages, e.g. English, Arabic, Turkish" },
+        "recitationStyles": { "type": "array", "description": "List of recitation Qira'at styles, e.g. Hafs, Warsh, Qalun" },
+        "operatingHours": { "type": "string", "description": "Hours or session times" },
+        "teacherName": { "type": "string", "description": "Name of the Sheikh or teacher leading the circle" },
+        "contactEmail": { "type": "string", "description": "Contact email address" },
+        "contactPhone": { "type": "string", "description": "Contact phone number" },
+        "reviewsCount": { "type": "number", "description": "Total number of reviews written for this center" },
+        "averageRating": { "type": "number", "description": "Average rating calculated from reviews" },
+        "createdBy": { "type": "string", "description": "UID of the host who listed this center" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Last update timestamp" },
+        "isApproved": { "type": "boolean", "description": "Whether the center has been accepted/approved by an admin" },
+        "noQuranHifz": { "type": "boolean", "description": "Indicates if the center does not require/offer full Quran Hifz (memorization)" },
+        "offersCourses": { "type": "boolean", "description": "Indicates if the center offers academic courses, classes, or seminars" }
+      },
+      "required": [
+        "id", "name", "description", "lat", "lng", "address", "city", "country",
+        "dropInWelcomed", "gender", "ageGroups", "languages", "recitationStyles",
+        "operatingHours", "teacherName", "createdBy", "createdAt", "updatedAt"
+      ]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "A review written by a traveler vouching for how accommodating a center is",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The review unique ID" },
+        "centerId": { "type": "string", "description": "The center this review belongs to" },
+        "userId": { "type": "string", "description": "UID of the reviewer" },
+        "userName": { "type": "string", "description": "Reviewer's display name" },
+        "rating": { "type": "number", "description": "Overall score from 1 to 5" },
+        "comment": { "type": "string", "description": "Written review feedback" },
+        "travelerOrigin": { "type": "string", "description": "Home town of the traveling reviewer (e.g., London, UK)" },
+        "welcomingScore": { "type": "number", "description": "How welcoming the center was to foreigners, from 1 to 5" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Creation timestamp" }
+      },
+      "required": ["id", "centerId", "userId", "userName", "rating", "comment", "travelerOrigin", "welcomingScore", "createdAt"]
+    }
+  },
+  "firestore": {
+    "user_profiles/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile collection containing system roles and registration times"
+    },
+    "tahfid_centers/{centerId}": {
+      "schema": "TahfidCenter",
+      "description": "Quran memorization centers listed by hosts or imported"
+    },
+    "tahfid_centers/{centerId}/reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Reviews and traveler feedback for a specific Tahfid center"
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Katatib",
+  "description": "A digital bridge connecting traveling Muslims with local Quran memorization associations (Tahfid) worldwide.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

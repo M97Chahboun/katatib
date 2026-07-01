@@ -1,0 +1,159 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helper Functions ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn();
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && 
+        exists(/databases/$(database)/documents/user_profiles/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/user_profiles/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Entity Validation Helpers ---
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'email', 'role', 'createdAt', 'updatedAt']) 
+        && data.keys().size() == 6
+        && data.uid is string && data.uid.size() <= 128
+        && data.displayName is string && data.displayName.size() >= 2 && data.displayName.size() <= 100
+        && data.email is string && data.email.size() <= 256
+        && data.role in ['traveler', 'host', 'admin']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTahfidCenter(data) {
+      return data.keys().hasAll(['id', 'name', 'description', 'lat', 'lng', 'address', 'city', 'country', 'dropInWelcomed', 'gender', 'ageGroups', 'languages', 'recitationStyles', 'operatingHours', 'teacherName', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() >= 3 && data.name.size() <= 150
+        && data.description is string && data.description.size() >= 10 && data.description.size() <= 2000
+        && data.lat is number && data.lat >= -90.0 && data.lat <= 90.0
+        && data.lng is number && data.lng >= -180.0 && data.lng <= 180.0
+        && data.address is string && data.address.size() <= 300
+        && data.city is string && data.city.size() <= 100
+        && data.country is string && data.country.size() <= 100
+        && data.dropInWelcomed is bool
+        && data.gender in ['men', 'women', 'boys', 'girls', 'mixed']
+        && data.ageGroups is list && data.ageGroups.size() <= 10
+        && data.languages is list && data.languages.size() <= 10
+        && data.recitationStyles is list && data.recitationStyles.size() <= 10
+        && data.operatingHours is string && data.operatingHours.size() <= 200
+        && data.teacherName is string && data.teacherName.size() <= 150
+        && data.createdBy is string && data.createdBy.size() <= 128
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('contactEmail' in data) || (data.contactEmail is string && data.contactEmail.size() <= 256))
+        && (!('contactPhone' in data) || (data.contactPhone is string && data.contactPhone.size() <= 50))
+        && (!('reviewsCount' in data) || (data.reviewsCount is number))
+        && (!('averageRating' in data) || (data.averageRating is number))
+        && (!('isApproved' in data) || (data.isApproved is bool))
+        && (!('noQuranHifz' in data) || (data.noQuranHifz is bool))
+        && (!('offersCourses' in data) || (data.offersCourses is bool));
+    }
+
+    function isValidReview(data) {
+      return data.keys().hasAll(['id', 'centerId', 'userId', 'userName', 'rating', 'comment', 'travelerOrigin', 'welcomingScore', 'createdAt']) 
+        && data.keys().size() == 9
+        && data.id is string && data.id.size() <= 128
+        && data.centerId is string && data.centerId.size() <= 128
+        && data.userId is string && data.userId == request.auth.uid
+        && data.userName is string && data.userName.size() >= 2 && data.userName.size() <= 100
+        && data.rating is number && data.rating >= 1.0 && data.rating <= 5.0
+        && data.comment is string && data.comment.size() >= 5 && data.comment.size() <= 1000
+        && data.travelerOrigin is string && data.travelerOrigin.size() <= 150
+        && data.welcomingScore is number && data.welcomingScore >= 1.0 && data.welcomingScore <= 5.0
+        && data.createdAt is timestamp;
+    }
+
+    // --- Collection Routes ---
+
+    // 1. User Profiles - strictly isolated (PII protection)
+    match /user_profiles/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isVerifiedUser() && isOwner(userId) && isValidUserProfile(incoming()) && incoming().createdAt == request.time;
+      allow update: if isVerifiedUser() && isOwner(userId) && isValidUserProfile(incoming())
+                       && incoming().uid == existing().uid
+                       && incoming().createdAt == existing().createdAt
+                       && incoming().updatedAt == request.time;
+      allow delete: if false; // profiles cannot be deleted from client
+    }
+
+    // 2. Tahfid Centers - Publicly readable, modifiable by Hosts & Admins
+    match /tahfid_centers/{centerId} {
+      // Anyone can get or list centers
+      allow get, list: if true;
+
+      // Create requires verified host user, defaulting isApproved to false or handled by admin
+      allow create: if isVerifiedUser() && isValidId(centerId) && isValidTahfidCenter(incoming()) 
+        && (incoming().createdBy == request.auth.uid || isAdmin())
+        && incoming().createdAt == request.time
+        && (!('isApproved' in incoming()) || incoming().isApproved == false || isAdmin());
+
+      // Update rules split by actions
+      allow update: if isVerifiedUser() && (
+        // Action A: Edit by Creator (Host can edit all mutable fields, but cannot approve themselves)
+        (existing().createdBy == request.auth.uid && isValidTahfidCenter(incoming())
+         && incoming().createdBy == existing().createdBy
+         && incoming().createdAt == existing().createdAt
+         && incoming().updatedAt == request.time
+         && (!('isApproved' in incoming()) || incoming().isApproved == false || ('isApproved' in existing() && incoming().isApproved == existing().isApproved) || isAdmin()))
+        ||
+        // Action B: Review Counters Update (by travelers submitting reviews)
+        (incoming().diff(existing()).affectedKeys().hasOnly(['reviewsCount', 'averageRating']))
+        ||
+        // Action C: Admin Approval & Moderator Edits
+        (isAdmin() && incoming().id == existing().id)
+      );
+
+      // Delete can be performed by the creator or an admin
+      allow delete: if isVerifiedUser() && (existing().createdBy == request.auth.uid || isAdmin());
+
+      // 3. Reviews Subcollection
+      match /reviews/{reviewId} {
+        allow get, list: if true;
+        
+        // Creating a review requires:
+        // 1. Logged in and verified
+        // 2. ID of review is valid
+        // 3. Parent center document exists
+        // 4. Matches schema
+        // 5. Reviewer userId matches current UID
+        allow create: if isVerifiedUser() && isValidId(reviewId) 
+          && exists(/databases/$(database)/documents/tahfid_centers/$(centerId))
+          && (isValidReview(incoming()) || isAdmin()) 
+          && (incoming().createdAt == request.time || isAdmin());
+          
+        // Reviews cannot be edited or deleted by users from the client once written
+        allow update, delete: if false;
+      }
+    }
+  }
+}
