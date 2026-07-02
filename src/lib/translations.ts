@@ -187,6 +187,8 @@ export const translations = {
     aboutSpiritualDesc: "كانت الجمعيات ولا تزال منارة لحفظ القرآن وترسيخ الهوية الإيمانية، ومحفلاً لبناء الرصيد الأخلاقي والتربوي للطلاب قبل العلوم الأكاديمية الصرفة.",
     aboutBrotherhood: "رابطة الإخاء والزمالة",
     aboutBrotherhoodDesc: "بتسهيل الانضمام العابر، نتيح للمسافرين القراءة جنباً إلى جنب مع أهل البلد، لنتجاوز الحواجز الجغرافية ونتوحد تحت ظلال كلام الله.",
+    founderStoryTitle: "قصة التأسيس",
+    founderStoryDesc: "بدأت فكرة هذه المنصة من تجربة شخصية عندما سافرت إلى مدينة فاس العريقة. كنت أبحث عن جمعية لحفظ القرآن الكريم وحضور دروس علمية، ولكنني واجهت صعوبة كبيرة في العثور على أي منها بسبب عدم وجودها على الخرائط أو الإنترنت. بعد ذلك، رأيت منشوراً لأحد الأصدقاء على فيسبوك يذكر فيه أن العديد من الأشخاص يراسلونه للبحث عن جمعيات مماثلة في مدن مختلفة. في تلك اللحظة، أدركت الحاجة الماسة لهذه المنصة وقررت تطوير \"كتاتيب\" لتكون الجسر الذي يربط المسافرين ببيوت الله وجمعيات التحفيظ في كل مكان.",
     // Admin translations
     adminPortal: "إدارة المنصة",
     adminBannerTitle: "مراجعة واعتماد الجمعيات",
@@ -451,6 +453,8 @@ export const translations = {
     aboutSpiritualDesc: "Traditional associations are sanctuaries of preservation, cultivating active spiritual literacy and profound connection with Quranic recitation before academic learning.",
     aboutBrotherhood: "Bonds of Global Brotherhood",
     aboutBrotherhoodDesc: "By easing short-term entry barriers, travelers recite shoulder-to-shoulder with locals, bridging geographical distances through unified devotion.",
+    founderStoryTitle: "The Founder's Story",
+    founderStoryDesc: "The idea for this platform began from a personal experience when I traveled to the historic city of Fes. I was looking for an association for Quran memorization (Hifd) and educational courses, but I struggled to find any because they were not listed on maps or the internet. Later, I saw a friend's Facebook post mentioning that many people message him looking for similar associations in various cities. At that moment, I realized the urgent need for this platform and decided to develop \"Katatib\" to be the bridge connecting travelers to the houses of Allah and Tahfid associations everywhere.",
     // Admin translations
     adminPortal: "Admin Control",
     adminBannerTitle: "Review & Approve Associations",

@@ -167,6 +167,8 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem('katatib_lang', lang);
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
   }, [lang]);
 
   useEffect(() => {
@@ -2953,10 +2955,10 @@ export default function App() {
             
             {/* Header branding */}
             <div className="text-center space-y-3">
-              <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto font-serif text-3xl font-bold border shadow-sm ${
-                darkMode ? 'bg-stone-850 border-stone-800 text-white' : 'bg-emerald-50 border-emerald-100 text-emerald-800'
+              <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto border shadow-sm ${
+                darkMode ? 'bg-stone-850 border-stone-800 text-emerald-400' : 'bg-emerald-50 border-emerald-100 text-emerald-700'
               }`}>
-                الكتّاب
+                <Logo size={48} strokeWidth={3} className="text-current" />
               </div>
               <h2 className={`text-3xl md:text-4xl font-serif font-bold tracking-tight ${darkMode ? 'text-white' : 'text-[#064E3B]'}`}>
                 {t.aboutTitle}
@@ -3003,6 +3005,18 @@ export default function App() {
                 </div>
               </div>
 
+              <div className="bg-emerald-50 dark:bg-stone-850/50 p-6 rounded-2xl border border-emerald-100 dark:border-stone-800 my-8 not-prose">
+                <h3 className={`font-serif font-bold text-lg mb-3 flex items-center gap-2 ${darkMode ? 'text-white' : 'text-emerald-900'}`}>
+                  <Compass className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                  {/* @ts-ignore */}
+                  {t.founderStoryTitle}
+                </h3>
+                <p className={`text-sm leading-relaxed ${darkMode ? 'text-stone-300' : 'text-stone-700'}`}>
+                  {/* @ts-ignore */}
+                  {t.founderStoryDesc}
+                </p>
+              </div>
+
               <h3 className={`font-serif font-bold text-lg border-b pb-2 ${darkMode ? 'text-white border-stone-800' : 'text-stone-900 border-stone-100'}`}>
                 {t.whyTravelersNeed}
               </h3>
@@ -3024,9 +3038,6 @@ export default function App() {
                 {t.whyConclusion}
               </p>
 
-              <div className="p-5 bg-emerald-950/40 text-emerald-300 rounded-2xl border border-emerald-900/30 text-xs leading-relaxed font-bold">
-                {t.aboutPledge}
-              </div>
             </article>
           </div>
         )}
