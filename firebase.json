@@ -1,4 +1,8 @@
 {
+  "firestore": {
+    "database": "ai-studio-katatib-fd59b3c5-f690-45b7-8a84-8a4a96cb618b",
+    "rules": "firestore.rules"
+  },
   "hosting": {
     "public": "dist",
     "ignore": [

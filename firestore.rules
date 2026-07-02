@@ -51,7 +51,7 @@ service cloud.firestore {
     }
 
     function isValidTahfidCenter(data) {
-      return data.keys().hasAll(['id', 'name', 'description', 'lat', 'lng', 'address', 'city', 'country', 'dropInWelcomed', 'gender', 'ageGroups', 'languages', 'recitationStyles', 'operatingHours', 'teacherName', 'createdBy', 'createdAt', 'updatedAt'])
+      return data.keys().hasAll(['id', 'name', 'description', 'lat', 'lng', 'address', 'city', 'country', 'ageGroups', 'operatingHours', 'createdBy', 'createdAt', 'updatedAt'])
         && data.id is string && data.id.size() <= 128
         && data.name is string && data.name.size() >= 3 && data.name.size() <= 150
         && data.description is string && data.description.size() >= 10 && data.description.size() <= 2000
@@ -60,13 +60,8 @@ service cloud.firestore {
         && data.address is string && data.address.size() <= 300
         && data.city is string && data.city.size() <= 100
         && data.country is string && data.country.size() <= 100
-        && data.dropInWelcomed is bool
-        && data.gender in ['men', 'women', 'boys', 'girls', 'mixed']
         && data.ageGroups is list && data.ageGroups.size() <= 10
-        && data.languages is list && data.languages.size() <= 10
-        && data.recitationStyles is list && data.recitationStyles.size() <= 10
         && data.operatingHours is string && data.operatingHours.size() <= 200
-        && data.teacherName is string && data.teacherName.size() <= 150
         && data.createdBy is string && data.createdBy.size() <= 128
         && data.createdAt is timestamp
         && data.updatedAt is timestamp

@@ -20,13 +20,8 @@ export interface TahfidCenter {
   address: string;
   city: string;
   country: string;
-  dropInWelcomed: boolean;
-  gender: 'men' | 'women' | 'boys' | 'girls' | 'mixed';
   ageGroups: string[]; // e.g. ["children", "youth", "adults"]
-  languages: string[]; // e.g. ["English", "Arabic", "Turkish"]
-  recitationStyles: string[]; // e.g. ["Hafs", "Warsh", "Qalun"]
   operatingHours: string;
-  teacherName: string;
   contactEmail?: string;
   contactPhone?: string;
   reviewsCount?: number;

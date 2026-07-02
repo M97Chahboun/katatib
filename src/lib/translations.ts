@@ -24,17 +24,7 @@ export const translations = {
     dbEmptyDesc: "اضغط على زر التهيئة لرفع 6 جمعيات تجريبية لقاعدة البيانات الحية",
     seedDbBtn: "تهيئة قاعدة البيانات",
     
-    // Current journey block
-    currentJourney: "الرحلة الحالية",
-    active: "نشط",
-    featuredTitle: "حفظ الصباح في المسجد الأزرق",
-    featuredDesc: "تبدأ جلسة الجمعية خلال 45 دقيقة. بقيادة الشيخ أحمد دمير (الإنجليزية/التركية).",
-    checkInBtn: "تسجيل الحضور الآن",
-    checkInAlert: "تم تسجيل الحضور بنجاح! مرحباً بكم في جمعية المسجد الأزرق.",
-    activeJourney: "الرحلة الحالية",
-    activeJourneyTitle: "حفظ الصباح في المسجد الأزرق",
-    activeJourneyDesc: "تبدأ جلسة الجمعية خلال 45 دقيقة. بقيادة الشيخ أحمد دمير (الإنجليزية/التركية).",
-    
+
     // Map help
     mapHelp: "اسحب وحرّك الخريطة لاستكشاف الجمعيات حول العالم",
     locationMapTitle: "خريطة الاستكشاف التفاعلية",
@@ -76,7 +66,10 @@ export const translations = {
     noCentersFound: "لا توجد جمعيات تحفيظ تطابق فلاتر البحث",
     noCentersFoundDesc: "حاول توسيع نطاق البحث أو تخفيف قيود التصفية (مثل إعدادات المدينة أو اللغة).",
     verifiedKuttabsCount: "جمعيات موثقة عالمياً",
-    verifiedKuttabsGlobally: "جمعيات موثقة عالمياً",
+    verifiedKuttabsGlobally: "جمعيات موثقة",
+    countriesCovered: "دول مغطاة",
+    citiesCovered: "مدن مغطاة",
+    totalReviews: "تقييمات المسافرين",
     globalTravelerRating: "التقييم العالمي للمسافرين",
     explorePromptTitle: "استكشف الجمعيات المحلية",
     explorePromptDesc: "اختر جمعية من الخريطة أو انقر على بطاقة قائمة على اليمين لقراءة المواعيد واللغات وأسماء المعلمين وتقييمات المسافرين.",
@@ -266,16 +259,7 @@ export const translations = {
     dbEmptyDesc: "Click Seed to upload 6 demo associations to the live database",
     seedDbBtn: "Seed Live DB",
     
-    // Current journey block
-    currentJourney: "Current Journey",
-    active: "ACTIVE",
-    featuredTitle: "Morning Memorization in the Blue Mosque",
-    featuredDesc: "Session starts in 45 minutes. Led by Sheikh Ahmet Demir (English/Turkish).",
-    checkInBtn: "Check-in Now",
-    checkInAlert: "Check-in successful! Welcome to the Blue Mosque association.",
-    activeJourney: "Current Journey",
-    activeJourneyTitle: "Morning Memorization in the Blue Mosque",
-    activeJourneyDesc: "Session starts in 45 minutes. Led by Sheikh Ahmet Demir (English/Turkish).",
+
     
     // Map help
     mapHelp: "Drag & scroll to explore associations worldwide",
@@ -318,7 +302,10 @@ export const translations = {
     noCentersFound: "No memorization associations match your filters",
     noCentersFoundDesc: "Try expanding your search query or loosening filter constraints (e.g. city or language settings).",
     verifiedKuttabsCount: "Verified Associations Globally",
-    verifiedKuttabsGlobally: "Verified Associations Globally",
+    verifiedKuttabsGlobally: "Verified Associations",
+    countriesCovered: "Countries Covered",
+    citiesCovered: "Cities Covered",
+    totalReviews: "Traveler Reviews",
     globalTravelerRating: "Global Traveler Rating",
     explorePromptTitle: "Explore Local Associations",
     explorePromptDesc: "Select an association on the map or click a list card on the left to read hours, languages, teacher names, and reviews from traveling Muslims.",

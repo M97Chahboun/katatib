@@ -11,6 +11,7 @@ import {
   signInWithPopup, 
   signOut, 
   onAuthStateChanged, 
+  signInAnonymously,
   User 
 } from 'firebase/auth';
 import { 
@@ -64,7 +65,7 @@ import {
   Share2
 } from 'lucide-react';
 import { UserProfile, TahfidCenter, Review } from './types';
-import { SEED_CENTERS, SEED_REVIEWS } from './lib/seedData';
+// Seed data removed for production deployment
 const InteractiveMap = React.lazy(() => import('./components/InteractiveMap'));
 const LocationPickerMap = React.lazy(() => import('./components/LocationPickerMap'));
 import { translations } from './lib/translations';
@@ -146,28 +147,6 @@ export default function App() {
     return 0;
   };
 
-  const getGenderLabel = (gender: string) => {
-    if (lang === 'ar') {
-      switch (gender) {
-        case 'mixed': return 'مختلط';
-        case 'men': return 'رجال فقط';
-        case 'women': return 'نساء فقط';
-        case 'boys': return 'أولاد فقط';
-        case 'girls': return 'بنات فقط';
-        default: return gender;
-      }
-    } else {
-      switch (gender) {
-        case 'mixed': return 'Mixed Genders';
-        case 'men': return 'Men Only';
-        case 'women': return 'Women Only';
-        case 'boys': return 'Boys Only';
-        case 'girls': return 'Girls Only';
-        default: return gender;
-      }
-    }
-  };
-
   const getAgeGroupLabel = (age: string) => {
     if (lang === 'ar') {
       switch (age.toLowerCase()) {
@@ -184,50 +163,6 @@ export default function App() {
         default: return age;
       }
     }
-  };
-
-  const getLanguageLabel = (language: string) => {
-    const isArabic = lang === 'ar';
-    const clean = language.trim().toLowerCase();
-    
-    if (clean === 'arabic' || clean === 'العربية') {
-      return isArabic ? 'العربية' : 'Arabic';
-    }
-    if (clean === 'english' || clean === 'الإنجليزية') {
-      return isArabic ? 'الإنجليزية' : 'English';
-    }
-    if (clean === 'french' || clean === 'الفرنسية') {
-      return isArabic ? 'الفرنسية' : 'French';
-    }
-    if (clean === 'turkish' || clean === 'التركية') {
-      return isArabic ? 'التركية' : 'Turkish';
-    }
-    if (clean === 'malay' || clean === 'الملايوية') {
-      return isArabic ? 'الملايوية' : 'Malay';
-    }
-    return language;
-  };
-
-  const getRecitationLabel = (style: string) => {
-    const isArabic = lang === 'ar';
-    const clean = style.trim().toLowerCase();
-    
-    if (clean === 'warsh' || clean === 'ورش') {
-      return isArabic ? 'ورش عن نافع' : 'Warsh';
-    }
-    if (clean === 'hafs' || clean === 'حفص') {
-      return isArabic ? 'حفص عن عاصم' : 'Hafs';
-    }
-    if (clean === 'qalun' || clean === 'قالون') {
-      return isArabic ? 'قالون عن نافع' : 'Qalun';
-    }
-    if (clean === 'al-duri' || clean === 'الدوري') {
-      return isArabic ? 'الدوري عن أبي عمرو' : 'Al-Duri';
-    }
-    if (clean === 'بدون حفظ' || clean === 'none' || clean === 'none (unsupported hifz)' || clean === 'unsupported hifz' || clean === 'no_hifz') {
-      return isArabic ? 'لا يوجد محفظ' : 'None (Unsupported Hifz)';
-    }
-    return style;
   };
 
   useEffect(() => {
@@ -264,17 +199,15 @@ export default function App() {
   const [selectedCenter, setSelectedCenter] = useState<TahfidCenter | null>(null);
   const [centerReviews, setCenterReviews] = useState<Review[]>([]);
   const [loadingReviews, setLoadingReviews] = useState(false);
-  const [isUsingFallback, setIsUsingFallback] = useState(false);
+  const [isUsingFallbackState, setIsUsingFallback] = useState(false);
+  const isUsingFallback = isUsingFallbackState || user?.uid?.startsWith('guest_');
   const [expandedApprovedCenters, setExpandedApprovedCenters] = useState<Record<string, boolean>>({});
   const [expandedPendingCenters, setExpandedPendingCenters] = useState<Record<string, boolean>>({});
 
   // Search & Filters State
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterCountry, setFilterCountry] = useState('Morocco');
   const [filterCity, setFilterCity] = useState('all');
-  const [filterDropIn, setFilterDropIn] = useState(false);
-  const [filterGender, setFilterGender] = useState('all');
-  const [filterLanguage, setFilterLanguage] = useState('all');
-  const [filterRecitation, setFilterRecitation] = useState('all');
   const [filterOffersCourses, setFilterOffersCourses] = useState(false);
 
   // Lazy Loading / Pagination State for Centers
@@ -283,7 +216,7 @@ export default function App() {
   // Reset pagination when search or filters change
   useEffect(() => {
     setVisibleCount(5);
-  }, [searchQuery, filterCity, filterDropIn, filterGender, filterLanguage, filterRecitation, filterOffersCourses]);
+  }, [searchQuery, filterCountry, filterCity, filterOffersCourses]);
 
   // Write Review State
   const [reviewRating, setReviewRating] = useState(5);
@@ -303,13 +236,8 @@ export default function App() {
     address: '',
     city: 'Fes',
     country: 'Morocco',
-    dropInWelcomed: true,
-    gender: 'mixed' as TahfidCenter['gender'],
     ageGroups: [] as string[],
-    languages: ['العربية'] as string[],
-    recitationStyles: ['ورش'] as string[],
     operatingHours: '',
-    teacherName: '',
     contactEmail: '',
     contactPhone: '',
     offersCourses: false
@@ -536,7 +464,11 @@ export default function App() {
       (snapshot) => {
         const list: TahfidCenter[] = [];
         snapshot.forEach((doc) => {
-          list.push({ id: doc.id, ...doc.data() } as TahfidCenter);
+          const data = doc.data() as TahfidCenter;
+          // Hide all pre-seeded dummy data
+          if (data.createdBy !== 'D290nfTo4SQKK99CQYt0RLekMUI2') {
+            list.push({ id: doc.id, ...data });
+          }
         });
         setCenters(list);
         setIsUsingFallback(false);
@@ -547,13 +479,13 @@ export default function App() {
         const cached = localStorage.getItem('katatib_centers');
         if (cached) {
           try {
-            setCenters(JSON.parse(cached));
+            const parsed = JSON.parse(cached) as TahfidCenter[];
+            setCenters(parsed.filter(c => c.createdBy !== 'D290nfTo4SQKK99CQYt0RLekMUI2'));
           } catch {
-            setCenters(SEED_CENTERS);
+            setCenters([]);
           }
         } else {
-          setCenters(SEED_CENTERS);
-          localStorage.setItem('katatib_centers', JSON.stringify(SEED_CENTERS));
+          setCenters([]);
         }
         setIsUsingFallback(true);
         setLoadingCenters(false);
@@ -592,12 +524,10 @@ export default function App() {
             try {
               setCenterReviews(JSON.parse(cached));
             } catch {
-              const offlineReviews = SEED_REVIEWS.filter(r => r.centerId === selectedCenter.id);
-              setCenterReviews(offlineReviews);
+              setCenterReviews([]);
             }
           } else {
-            const offlineReviews = SEED_REVIEWS.filter(r => r.centerId === selectedCenter.id);
-            setCenterReviews(offlineReviews);
+            setCenterReviews([]);
           }
         }
         setLoadingReviews(false);
@@ -615,13 +545,10 @@ export default function App() {
           try {
             setCenterReviews(JSON.parse(cached));
           } catch {
-            const offlineReviews = SEED_REVIEWS.filter(r => r.centerId === selectedCenter.id);
-            setCenterReviews(offlineReviews);
+            setCenterReviews([]);
           }
         } else {
-          const offlineReviews = SEED_REVIEWS.filter(r => r.centerId === selectedCenter.id);
-          setCenterReviews(offlineReviews);
-          localStorage.setItem(cachedReviewsKey, JSON.stringify(offlineReviews));
+          setCenterReviews([]);
         }
         setLoadingReviews(false);
       }
@@ -652,29 +579,13 @@ export default function App() {
     }
   };
 
-  const handleGuestSignIn = () => {
-    const mockUid = `guest_${Math.random().toString(36).substring(2, 9)}`;
-    const guestUser = {
-      uid: mockUid,
-      displayName: lang === 'ar' ? 'زائر تجريبي' : 'Demo Guest',
-      email: 'guest@katatib.example.com',
-      emailVerified: true,
-      isAnonymous: true,
-    };
-    setUser(guestUser as any);
-    setUserProfile(null); // This forces the onboarding modal to open, letting them choose role and type name
-    setShowRoleSelection(true);
-    showToast(
-      lang === 'ar' 
-        ? 'تم الدخول كزائر! يرجى كتابة اسمك واختيار صفتك لإكمال التسجيل.' 
-        : 'Signed in as Guest! Please complete onboarding with your name and role.', 
-      'info'
-    );
-  };
+
 
   const handleSignOut = async () => {
     try {
       await signOut(auth);
+      setUser(null);
+      setUserProfile(null);
       setActiveTab('discover');
     } catch (err) {
       console.error("Sign-out error: ", err);
@@ -783,169 +694,8 @@ export default function App() {
     }
   };
 
-  // Seed live database with our sample centers (convenience for demo)
-  const handleSeedDatabaseLive = async () => {
-    if (!user) {
-      showToast(t.authRequiredToReview, 'error');
-      return;
-    }
-    setLoadingCenters(true);
-    try {
-      if (isUsingFallback) {
-        // Seeding to LocalStorage
-        const existingIds = new Set(centers.map(c => c.id));
-        let updatedCenters = [...centers];
-        
-        for (const center of SEED_CENTERS) {
-          if (existingIds.has(center.id)) {
-            console.log(`Center ${center.id} already exists in local cache. Skipping...`);
-            continue;
-          }
-
-          updatedCenters.push({
-            ...center,
-            createdBy: user.uid,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            isApproved: true
-          });
-
-          // Seed reviews in localStorage
-          const reviews = SEED_REVIEWS.filter(r => r.centerId === center.id);
-          const cachedReviewsKey = `katatib_reviews_${center.id}`;
-          localStorage.setItem(cachedReviewsKey, JSON.stringify(reviews));
-        }
-
-        setCenters(updatedCenters);
-        localStorage.setItem('katatib_centers', JSON.stringify(updatedCenters));
-        showToast(t.seedAlertSuccess, 'success');
-      } else {
-        // 1. Get all existing centers in Firestore to see what's already there
-        const querySnapshot = await getDocs(collection(db, 'tahfid_centers'));
-        const existingIds = new Set(querySnapshot.docs.map(doc => doc.id));
-
-        for (const center of SEED_CENTERS) {
-          // If it already exists, skip it to avoid permission/createdAt overwrite issues
-          if (existingIds.has(center.id)) {
-            console.log(`Center ${center.id} already exists in Firestore. Skipping...`);
-            continue;
-          }
-
-          // Create center document
-          const centerRef = doc(db, 'tahfid_centers', center.id);
-          await setDoc(centerRef, {
-            ...center,
-            createdBy: user.uid, // Claim ownership so user can manage/delete
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-            isApproved: true
-          });
-
-          // Add corresponding seed reviews
-          const reviews = SEED_REVIEWS.filter(r => r.centerId === center.id);
-          for (const rev of reviews) {
-            const revRef = doc(collection(db, `tahfid_centers/${center.id}/reviews`), rev.id);
-            await setDoc(revRef, {
-              ...rev,
-              userId: user.uid, // Satisfy rule: data.userId == request.auth.uid
-              createdAt: serverTimestamp()
-            });
-          }
-        }
-        setIsUsingFallback(false);
-        showToast(t.seedAlertSuccess, 'success');
-      }
-    } catch (err) {
-      console.error("Seeding live DB failed: ", err);
-      showToast(t.seedAlertFail + "\nError: " + (err instanceof Error ? err.message : String(err)), 'error');
-    } finally {
-      setLoadingCenters(false);
-    }
-  };
-
-  // Administrative Reset & Re-Seed with Arabic mock data
-  const handleResetAndSeedDatabase = () => {
-    if (!user) {
-      showToast(t.authRequiredToReview, 'error');
-      return;
-    }
-
-    showConfirm({
-      title: lang === 'ar' ? "إعادة تهيئة قاعدة البيانات" : "Reset & Seed Database",
-      message: lang === 'ar' 
-        ? "هل أنت متأكد من رغبتك في حذف جميع الحلقات الحالية وإعادة تهيئة قاعدة البيانات بالبيانات العربية التجريبية؟" 
-        : "Are you sure you want to delete all current listings and reset the database with the new Arabic seed data?",
-      isDanger: true,
-      onConfirm: async () => {
-        setLoadingCenters(true);
-        try {
-          if (isUsingFallback) {
-            // Seeding LocalStorage
-            const seededCenters = SEED_CENTERS.map(c => ({
-              ...c,
-              createdBy: user.uid,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              isApproved: true
-            }));
-
-            // Save centers to localStorage
-            localStorage.setItem('katatib_centers', JSON.stringify(seededCenters));
-            setCenters(seededCenters);
-
-            // Save reviews to localStorage
-            for (const center of SEED_CENTERS) {
-              const reviews = SEED_REVIEWS.filter(r => r.centerId === center.id).map(r => ({
-                ...r,
-                userId: user.uid,
-                createdAt: new Date().toISOString()
-              }));
-              localStorage.setItem(`katatib_reviews_${center.id}`, JSON.stringify(reviews));
-            }
-
-            showToast(lang === 'ar' ? "تمت إعادة تهيئة قاعدة البيانات بالبيانات العربية بنجاح!" : "Database reset and re-seeded with Arabic dummy data successfully!", 'success');
-          } else {
-            // Delete all current centers from Firestore
-            const querySnapshot = await getDocs(collection(db, 'tahfid_centers'));
-            for (const docSnap of querySnapshot.docs) {
-              await deleteDoc(docSnap.ref);
-            }
-            
-            // Now write the new Arabic seed centers
-            for (const center of SEED_CENTERS) {
-              const centerRef = doc(db, 'tahfid_centers', center.id);
-              await setDoc(centerRef, {
-                ...center,
-                createdBy: user.uid,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-                isApproved: true
-              });
-
-              // Add corresponding seed reviews
-              const reviews = SEED_REVIEWS.filter(r => r.centerId === center.id);
-              for (const rev of reviews) {
-                const revRef = doc(collection(db, `tahfid_centers/${center.id}/reviews`), rev.id);
-                await setDoc(revRef, {
-                  ...rev,
-                  userId: user.uid, // Satisfy rule: data.userId == request.auth.uid
-                  createdAt: serverTimestamp()
-                });
-              }
-            }
-            setIsUsingFallback(false);
-            showToast(lang === 'ar' ? "تمت إعادة تهيئة قاعدة البيانات بالبيانات العربية بنجاح!" : "Database reset and re-seeded with Arabic dummy data successfully!", 'success');
-          }
-        } catch (err) {
-          console.error("Database reset failed: ", err);
-          showToast((lang === 'ar' ? "فشلت إعادة تهيئة قاعدة البيانات. خطأ: " : "Failed to reset and seed database. Error: ") + (err instanceof Error ? err.message : String(err)), 'error');
-        } finally {
-          setLoadingCenters(false);
-        }
-      }
-    });
-  };
-
+  
+  
   // Submit a Review
   const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -985,10 +735,10 @@ export default function App() {
           try {
             reviewsList = JSON.parse(existingReviewsCached);
           } catch {
-            reviewsList = SEED_REVIEWS.filter(r => r.centerId === centerId);
+            reviewsList = [];
           }
         } else {
-          reviewsList = SEED_REVIEWS.filter(r => r.centerId === centerId);
+          reviewsList = [];
         }
         const reviewWithDate = {
           ...newReviewPayload,
@@ -1059,10 +809,10 @@ export default function App() {
           try {
             reviewsList = JSON.parse(existingReviewsCached);
           } catch {
-            reviewsList = SEED_REVIEWS.filter(r => r.centerId === centerId);
+            reviewsList = [];
           }
         } else {
-          reviewsList = SEED_REVIEWS.filter(r => r.centerId === centerId);
+          reviewsList = [];
         }
         const reviewWithDate = {
           id: reviewId,
@@ -1133,7 +883,7 @@ export default function App() {
 
     const {
       name, description, lat, lng, address, city, country,
-      gender, ageGroups, languages, recitationStyles, operatingHours, teacherName,
+      ageGroups, operatingHours,
       contactEmail, contactPhone
     } = hostNewCenter;
 
@@ -1169,8 +919,6 @@ export default function App() {
     const centerPath = `tahfid_centers/${centerId}`;
 
     const finalAgeGroups = ageGroups && ageGroups.length > 0 ? ageGroups : ['children', 'youth', 'adults'];
-    const finalLanguages = languages && languages.length > 0 ? languages : ['العربية'];
-    const finalRecitationStyles = recitationStyles && recitationStyles.length > 0 ? recitationStyles : ['ورش'];
 
     try {
       if (isUsingFallback) {
@@ -1182,13 +930,8 @@ export default function App() {
           address: address.trim(),
           city: city.trim(),
           country: country.trim(),
-          dropInWelcomed: hostNewCenter.dropInWelcomed,
-          gender,
           ageGroups: finalAgeGroups,
-          languages: finalLanguages,
-          recitationStyles: finalRecitationStyles,
           operatingHours: operatingHours.trim(),
-          teacherName: teacherName.trim(),
           isApproved: isAdmin, // admins keep it approved, normal hosts go back to pending
           moderationNote: "",
           offersCourses: !!hostNewCenter.offersCourses
@@ -1241,13 +984,8 @@ export default function App() {
             address: address.trim(),
             city: city.trim(),
             country: country.trim(),
-            dropInWelcomed: hostNewCenter.dropInWelcomed,
-            gender,
             ageGroups: finalAgeGroups,
-            languages: finalLanguages,
-            recitationStyles: finalRecitationStyles,
             operatingHours: operatingHours.trim(),
-            teacherName: teacherName.trim(),
             isApproved: isAdmin, // admins keep it approved, normal hosts go back to pending
             moderationNote: "", // clear note upon edit submit
             offersCourses: !!hostNewCenter.offersCourses,
@@ -1273,13 +1011,8 @@ export default function App() {
             address: address.trim(),
             city: city.trim(),
             country: country.trim(),
-            dropInWelcomed: hostNewCenter.dropInWelcomed,
-            gender,
             ageGroups: finalAgeGroups,
-            languages: finalLanguages,
-            recitationStyles: finalRecitationStyles,
             operatingHours: operatingHours.trim(),
-            teacherName: teacherName.trim(),
             createdBy: user.uid,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
@@ -1308,13 +1041,8 @@ export default function App() {
         address: '',
         city: 'Fes',
         country: 'Morocco',
-        dropInWelcomed: true,
-        gender: 'mixed',
         ageGroups: [],
-        languages: ['العربية'],
-        recitationStyles: ['ورش'],
         operatingHours: '',
-        teacherName: '',
         contactEmail: '',
         contactPhone: '',
         offersCourses: false
@@ -1331,13 +1059,8 @@ export default function App() {
           address: address.trim(),
           city: city.trim(),
           country: country.trim(),
-          dropInWelcomed: hostNewCenter.dropInWelcomed,
-          gender,
           ageGroups: finalAgeGroups,
-          languages: finalLanguages,
-          recitationStyles: finalRecitationStyles,
           operatingHours: operatingHours.trim(),
-          teacherName: teacherName.trim(),
           isApproved: isAdmin,
           moderationNote: "",
           offersCourses: !!hostNewCenter.offersCourses
@@ -1387,13 +1110,8 @@ export default function App() {
           address: '',
           city: 'Fes',
           country: 'Morocco',
-          dropInWelcomed: true,
-          gender: 'mixed',
           ageGroups: [],
-          languages: ['العربية'],
-          recitationStyles: ['ورش'],
           operatingHours: '',
-          teacherName: '',
           contactEmail: '',
           contactPhone: '',
           offersCourses: false
@@ -1462,13 +1180,8 @@ export default function App() {
       address: center.address,
       city: center.city,
       country: center.country,
-      dropInWelcomed: center.dropInWelcomed,
-      gender: center.gender,
       ageGroups: center.ageGroups,
-      languages: center.languages || [],
-      recitationStyles: center.recitationStyles || [],
       operatingHours: center.operatingHours,
-      teacherName: center.teacherName,
       contactEmail: center.contactEmail || '',
       contactPhone: center.contactPhone || '',
       offersCourses: !!center.offersCourses
@@ -1612,7 +1325,13 @@ export default function App() {
     });
   };
 
-  // List unique cities for dropdown selection
+  // Derive cities for the filter based on selected filter country
+  const filterCountryObj = filterCountry !== 'all' ? countriesList.find(c => c.name === filterCountry) : null;
+  const filterCitiesOfCountry = filterCountryObj
+    ? (City.getCitiesOfCountry(filterCountryObj.isoCode) || [])
+    : [];
+
+  // List unique cities for dropdown selection (fallback when no package country selected)
   const uniqueCities = Array.from(new Set(centers.map(c => c.city))).sort();
 
   // Filter Centers list
@@ -1628,56 +1347,11 @@ export default function App() {
       center.country.toLowerCase().includes(searchQuery.toLowerCase()) ||
       center.description.toLowerCase().includes(searchQuery.toLowerCase());
 
+    const matchesCountry = filterCountry === 'all' || center.country === filterCountry;
     const matchesCity = filterCity === 'all' || center.city === filterCity;
-    const matchesDropIn = !filterDropIn || center.dropInWelcomed === true;
-    const matchesGender = filterGender === 'all' || center.gender === filterGender;
-
-    const matchesLanguage = filterLanguage === 'all' || (
-      center.languages && center.languages.some(langVal => {
-        const cleanLang = langVal.trim().toLowerCase();
-        const cleanFilter = filterLanguage.trim().toLowerCase();
-        if (cleanFilter === 'العربية' || cleanFilter === 'arabic') {
-          return cleanLang === 'arabic' || cleanLang === 'العربية';
-        }
-        if (cleanFilter === 'الإنجليزية' || cleanFilter === 'english') {
-          return cleanLang === 'english' || cleanLang === 'الإنجليزية';
-        }
-        if (cleanFilter === 'الفرنسية' || cleanFilter === 'french') {
-          return cleanLang === 'french' || cleanLang === 'الفرنسية';
-        }
-        if (cleanFilter === 'التركية' || cleanFilter === 'turkish') {
-          return cleanLang === 'turkish' || cleanLang === 'التركية';
-        }
-        if (cleanFilter === 'الملايوية' || cleanFilter === 'malay') {
-          return cleanLang === 'malay' || cleanLang === 'الملايوية';
-        }
-        return cleanLang === cleanFilter;
-      })
-    );
-
-    const matchesRecitation = filterRecitation === 'all' || (
-      center.recitationStyles && center.recitationStyles.some(recVal => {
-        const cleanRec = recVal.trim().toLowerCase();
-        const cleanFilter = filterRecitation.trim().toLowerCase();
-        if (cleanFilter === 'ورش' || cleanFilter === 'warsh') {
-          return cleanRec === 'warsh' || cleanRec === 'ورش';
-        }
-        if (cleanFilter === 'حفص' || cleanFilter === 'hafs') {
-          return cleanRec === 'hafs' || cleanRec === 'حفص';
-        }
-        if (cleanFilter === 'قالون' || cleanFilter === 'qalun') {
-          return cleanRec === 'qalun' || cleanRec === 'قالون';
-        }
-        if (cleanFilter === 'الدوري' || cleanFilter === 'al-duri') {
-          return cleanRec === 'al-duri' || cleanRec === 'الدوري';
-        }
-        return cleanRec === cleanFilter;
-      })
-    );
-
     const matchesOffersCourses = !filterOffersCourses || center.offersCourses === true;
 
-    return matchesSearch && matchesCity && matchesDropIn && matchesGender && matchesLanguage && matchesRecitation && matchesOffersCourses;
+    return matchesSearch && matchesCountry && matchesCity && matchesOffersCourses;
   });
 
   return (
@@ -1699,28 +1373,28 @@ export default function App() {
           ? 'bg-stone-900/95 border-stone-800' 
           : 'bg-[#FCFBF9]/95 border-stone-200'
       }`}>
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
           
           {/* Logo Brand */}
           <div 
             onClick={() => { setActiveTab('discover'); setSelectedCenter(null); }}
-            className="flex items-center gap-3 cursor-pointer group animate-fade-in"
+            className="flex items-center gap-2 sm:gap-3 cursor-pointer group animate-fade-in shrink-0"
           >
-            <div className="w-13 h-13 bg-emerald-950 text-emerald-400 dark:text-emerald-300 rounded-2xl flex items-center justify-center shadow-md shadow-emerald-950/15 border border-emerald-800/80 group-hover:scale-105 transition-transform duration-200 p-1.5 shrink-0">
-              <Logo size={34} className="text-emerald-400 dark:text-emerald-300" strokeWidth={5.2} />
+            <div className="w-10 h-10 sm:w-13 sm:h-13 bg-emerald-950 text-emerald-400 dark:text-emerald-300 rounded-2xl flex items-center justify-center shadow-md shadow-emerald-950/15 border border-emerald-800/80 group-hover:scale-105 transition-transform duration-200 p-1.5 shrink-0">
+              <Logo size={28} className="text-emerald-400 dark:text-emerald-300 sm:w-8 sm:h-8" strokeWidth={5.2} />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
                 <span className={`font-serif text-lg md:text-xl font-bold tracking-tight ${darkMode ? 'text-white' : 'text-[#064E3B]'}`}>
                   {t.appName}
                 </span>
-                <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                <span className={`hidden md:inline-block text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${
                   darkMode ? 'bg-emerald-950/85 text-emerald-300' : 'bg-emerald-100 text-emerald-800'
                 }`}>
                   {t.portalSubtitle}
                 </span>
               </div>
-              <p className={`text-[10px] font-bold ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>{t.logoTagline}</p>
+              <p className={`hidden lg:block text-[10px] font-bold ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>{t.logoTagline}</p>
             </div>
           </div>
 
@@ -1778,7 +1452,7 @@ export default function App() {
           </nav>
 
           {/* User Auth and Theme/Language controls */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3">
             {/* Toggles */}
             <div className="flex items-center gap-1.5">
               {/* Language Selector */}
@@ -1825,8 +1499,8 @@ export default function App() {
                 </div>
                 
                 {/* Profile Avatar / Settings Dropdown */}
-                <div className="relative group">
-                  <button className={`w-10 h-10 rounded-full flex items-center justify-center font-bold overflow-hidden shadow-sm hover:scale-105 transition-all cursor-pointer ${
+                <div className="relative group" tabIndex={0}>
+                  <button className={`w-10 h-10 rounded-full flex items-center justify-center font-bold overflow-hidden shadow-sm hover:scale-105 outline-none transition-all cursor-pointer ${
                     darkMode ? 'bg-stone-900 border-stone-800 text-emerald-400' : 'bg-emerald-50 border-emerald-200 text-emerald-800'
                   }`}>
                     {user.photoURL ? (
@@ -1837,7 +1511,7 @@ export default function App() {
                   </button>
                   
                   {/* Dropdown menu */}
-                  <div className={`absolute end-0 mt-2 w-48 rounded-[1.5rem] shadow-lg border py-2.5 hidden group-hover:block hover:block z-50 transition-colors duration-300 ${
+                  <div className={`absolute end-0 mt-2 w-48 rounded-[1.5rem] shadow-lg border py-2.5 hidden group-hover:block group-focus-within:block hover:block z-50 transition-colors duration-300 ${
                     darkMode ? 'bg-stone-900 border-stone-800 text-stone-100' : 'bg-white border-stone-200 text-stone-900'
                   }`}>
                     <div className="px-4 py-2 border-b border-stone-100 dark:border-stone-800">
@@ -1875,7 +1549,8 @@ export default function App() {
                         {t.adminPortal}
                       </button>
                     )}
-                    {/* Role switcher inside dropdown */}
+                    {/* Role switcher inside dropdown — hidden for admins */}
+                    {!isAdmin && (
                     <div className="border-t border-stone-100 dark:border-stone-800 px-4 py-1.5">
                       <div className="text-[9px] uppercase tracking-wider font-extrabold text-stone-400 mb-1">
                         {lang === 'ar' ? 'تغيير نوع الحساب:' : 'Switch Account Role:'}
@@ -1897,16 +1572,9 @@ export default function App() {
                             🕌 {t.hostHub}
                           </button>
                         )}
-                        {userProfile?.role !== 'admin' && (
-                          <button
-                            onClick={() => handleSwitchRole('admin')}
-                            className={`w-full text-start px-2 py-1 text-[10px] font-bold rounded hover:bg-amber-50 dark:hover:bg-amber-950/20 text-amber-600 transition cursor-pointer`}
-                          >
-                            🛡️ {t.onboardAdminTitle}
-                          </button>
-                        )}
                       </div>
                     </div>
+                    )}
 
                     <button
                       onClick={handleSignOut}
@@ -1919,21 +1587,16 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={handleGuestSignIn}
-                  className="px-3 py-1.5 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-750 text-stone-700 dark:text-stone-300 text-[11px] font-bold rounded-full border border-stone-200 dark:border-stone-700 cursor-pointer transition-all active:scale-95"
-                  id="header-guest-login-btn"
-                >
-                  {lang === 'ar' ? 'دخول زائر' : 'Guest Sign-In'}
-                </button>
+              <div className="flex items-center gap-1.5 sm:gap-1.5">
+
                 <button
                   onClick={handleGoogleSignIn}
-                  className="px-3.5 py-1.5 bg-[#064E3B] hover:bg-[#043327] text-white text-[11px] font-bold rounded-full flex items-center gap-1.5 shadow-sm transition-all duration-200 border border-emerald-950 cursor-pointer active:scale-95"
+                  className="px-3 sm:px-3.5 py-1.5 bg-[#064E3B] hover:bg-[#043327] text-white text-[11px] font-bold rounded-full flex items-center gap-1.5 shadow-sm transition-all duration-200 border border-emerald-950 cursor-pointer active:scale-95 whitespace-nowrap"
                   id="header-login-btn"
+                  title={t.signIn}
                 >
-                  <Globe className="w-3.5 h-3.5 text-emerald-200" />
-                  {t.signIn}
+                  <Globe className="w-3.5 h-3.5 text-emerald-200 shrink-0" />
+                  <span>{t.signIn}</span>
                 </button>
               </div>
             )}
@@ -1942,51 +1605,51 @@ export default function App() {
       </header>
 
       {/* Mobile Navigation Tabs Bar */}
-      <div className={`md:hidden sticky top-[72px] z-30 border-b px-4 py-2 flex justify-around transition-colors duration-300 ${
-        darkMode ? 'bg-stone-900 border-stone-800' : 'bg-[#fbfbf8] border-slate-200'
+      <div className={`md:hidden fixed bottom-0 left-0 right-0 z-50 border-t px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] flex justify-around transition-colors duration-300 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)] ${
+        darkMode ? 'bg-stone-950/90 backdrop-blur-xl border-stone-800/60' : 'bg-white/90 backdrop-blur-xl border-stone-200/60'
       }`}>
         <button
           onClick={() => { setActiveTab('discover'); setSelectedCenter(null); }}
           className={`flex flex-col items-center gap-1 text-[11px] font-semibold transition-all ${
-            activeTab === 'discover' ? 'text-emerald-500 font-bold' : (darkMode ? 'text-stone-400' : 'text-slate-500')
+            activeTab === 'discover' ? 'text-emerald-600 dark:text-emerald-400 font-bold -translate-y-0.5' : (darkMode ? 'text-stone-400 hover:text-stone-300' : 'text-slate-500 hover:text-slate-700')
           }`}
         >
-          <Compass className="w-4 h-4" />
+          <Compass className={`w-5 h-5 ${activeTab === 'discover' ? 'drop-shadow-sm' : ''}`} />
           {t.exploreCenters}
         </button>
         <button
           onClick={() => setActiveTab('host')}
           className={`flex flex-col items-center gap-1 text-[11px] font-semibold transition-all ${
-            activeTab === 'host' ? 'text-emerald-500 font-bold' : (darkMode ? 'text-stone-400' : 'text-slate-500')
+            activeTab === 'host' ? 'text-emerald-600 dark:text-emerald-400 font-bold -translate-y-0.5' : (darkMode ? 'text-stone-400 hover:text-stone-300' : 'text-slate-500 hover:text-slate-700')
           }`}
         >
-          <Plus className="w-4 h-4" />
+          <Plus className={`w-5 h-5 ${activeTab === 'host' ? 'drop-shadow-sm' : ''}`} />
           {t.hostHub}
         </button>
         <button
           onClick={() => setActiveTab('about')}
           className={`flex flex-col items-center gap-1 text-[11px] font-semibold transition-all ${
-            activeTab === 'about' ? 'text-emerald-500 font-bold' : (darkMode ? 'text-stone-400' : 'text-slate-500')
+            activeTab === 'about' ? 'text-emerald-600 dark:text-emerald-400 font-bold -translate-y-0.5' : (darkMode ? 'text-stone-400 hover:text-stone-300' : 'text-slate-500 hover:text-slate-700')
           }`}
         >
-          <BookOpen className="w-4 h-4" />
+          <BookOpen className={`w-5 h-5 ${activeTab === 'about' ? 'drop-shadow-sm' : ''}`} />
           {t.heritage}
         </button>
         {isAdmin && (
           <button
             onClick={() => setActiveTab('admin')}
             className={`flex flex-col items-center gap-1 text-[11px] font-semibold transition-all ${
-              activeTab === 'admin' ? 'text-amber-500 font-bold' : (darkMode ? 'text-stone-400 hover:text-amber-300' : 'text-slate-500 hover:text-[#B45309]')
+              activeTab === 'admin' ? 'text-amber-600 dark:text-amber-400 font-bold -translate-y-0.5' : (darkMode ? 'text-stone-400 hover:text-amber-300' : 'text-slate-500 hover:text-[#B45309]')
             }`}
           >
-            <ShieldCheck className="w-4 h-4 text-amber-500" />
+            <ShieldCheck className={`w-5 h-5 ${activeTab === 'admin' ? 'drop-shadow-sm text-amber-500' : ''}`} />
             {t.adminPortal}
           </button>
         )}
       </div>
 
       {/* Main Content Sections Container */}
-      <main className="flex-1 w-full max-w-7xl mx-auto px-4 md:px-8 py-6">
+      <main className="flex-1 w-full max-w-7xl mx-auto px-4 md:px-8 py-6 pb-28 md:pb-6">
         
         {/* Onboarding Dialog Modal */}
         <AnimatePresence>
@@ -2043,7 +1706,7 @@ export default function App() {
                       {t.onboardRoleLabel}
                     </label>
                     
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {/* Traveler choice */}
                       <button
                         type="button"
@@ -2083,26 +1746,6 @@ export default function App() {
                           {t.onboardHostDesc}
                         </p>
                       </button>
-
-                      {/* Admin choice */}
-                      <button
-                        type="button"
-                        onClick={() => setSelectedOnboardRole('admin')}
-                        className={`p-3 rounded-xl border text-start transition-all cursor-pointer flex flex-col justify-between ${
-                          selectedOnboardRole === 'admin'
-                            ? (darkMode ? 'bg-emerald-950/60 border-emerald-500 ring-1 ring-emerald-500/35 text-white' : 'bg-emerald-50/70 border-emerald-600 ring-1 ring-emerald-600/35')
-                            : (darkMode ? 'bg-stone-800 border-stone-700 text-stone-300 hover:bg-stone-750' : 'bg-slate-50 hover:bg-slate-100/50 border-slate-200')
-                        }`}
-                        id="onboard-role-admin"
-                      >
-                        <div>
-                          <div className="text-lg mb-1">🛡️</div>
-                          <h4 className={`text-xs font-bold ${darkMode ? 'text-white' : 'text-slate-900'}`}>{t.onboardAdminTitle}</h4>
-                        </div>
-                        <p className={`text-[9px] leading-snug mt-1 ${darkMode ? 'text-stone-400' : 'text-slate-500'}`}>
-                          {t.onboardAdminDesc}
-                        </p>
-                      </button>
                     </div>
                   </div>
 
@@ -2131,7 +1774,7 @@ export default function App() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               
               {/* Primary Welcome Bento Block */}
-              <div className="lg:col-span-8 bg-emerald-900 text-amber-50 p-8 rounded-[2.5rem] relative overflow-hidden border border-emerald-950 shadow-sm flex flex-col justify-between min-h-[300px]">
+              <div className="lg:col-span-12 bg-emerald-900 text-amber-50 p-8 rounded-[2.5rem] relative overflow-hidden border border-emerald-950 shadow-sm flex flex-col justify-between min-h-[300px]">
                 {/* Backlight glow */}
                 <div className="absolute right-0 bottom-0 top-0 w-1/2 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-emerald-800/80 via-emerald-900/40 to-transparent pointer-events-none" />
                 
@@ -2146,48 +1789,6 @@ export default function App() {
                     {t.heroSubheadline}
                   </p>
                 </div>
-
-                {/* Instant Database Seeder Info for reviewers / new users */}
-                {(isUsingFallback || (centers.length > 0 && centers.length < 6)) && (
-                  <div className="mt-6 p-4 bg-emerald-950/80 rounded-[1.5rem] border border-emerald-800/60 max-w-xl text-xs text-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
-                    <div>
-                      <span className="font-bold block">⚠️ {t.dbEmptyBanner}</span>
-                      <span className="text-[11px] text-slate-300">
-                        {lang === 'ar' 
-                          ? "هل ترغب في تهيئة قاعدة البيانات بالبيانات العربية الستة والتقييمات؟" 
-                          : t.dbEmptyDesc}
-                      </span>
-                    </div>
-                    <button
-                      onClick={handleSeedDatabaseLive}
-                      className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl font-bold text-xs whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer"
-                      id="seed-live-db-btn"
-                    >
-                      <Database className="w-4 h-4" />
-                      {t.seedDbBtn}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Featured Traveler Session Bento Block */}
-              <div className="lg:col-span-4 bg-emerald-950 text-white rounded-[2.5rem] border border-emerald-900 shadow-sm p-8 flex flex-col justify-between">
-                <div>
-                  <div className="flex justify-between items-start">
-                    <span className="text-[10px] uppercase tracking-[0.2em] opacity-60 font-bold">{t.activeJourney}</span>
-                    <span className="bg-emerald-800 text-emerald-300 text-[10px] px-2 py-1 rounded-lg">ACTIVE</span>
-                  </div>
-                  <h2 className="text-2xl md:text-3xl font-serif italic mt-6 leading-tight">{t.activeJourneyTitle}</h2>
-                  <p className="mt-4 text-emerald-200 text-xs leading-relaxed opacity-90">
-                    {t.activeJourneyDesc}
-                  </p>
-                </div>
-                <button
-                  onClick={() => showToast(t.checkInAlert, 'success')}
-                  className="bg-white text-emerald-900 w-full py-3.5 mt-6 rounded-2xl font-bold text-xs tracking-wide shadow-lg hover:bg-emerald-50 transition cursor-pointer"
-                >
-                  {t.checkInBtn}
-                </button>
               </div>
 
             </div>
@@ -2230,35 +1831,21 @@ export default function App() {
               </React.Suspense>
             </div>
 
-            {/* COMMUNITY STATS & QUOTE BANNER */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Stats Card */}
-              <div className={`rounded-[2.5rem] border p-6 flex flex-col justify-center text-center transition-colors duration-300 ${
-                darkMode ? 'bg-stone-900 border-stone-800 text-stone-100' : 'bg-[#F9F8F6] border-stone-200 text-stone-900'
-              }`}>
-                <span className="text-4xl font-serif italic text-emerald-500">{filteredCenters.length || 6}</span>
-                <span className="text-[10px] uppercase tracking-widest text-stone-400 font-bold mt-2">{t.verifiedKuttabsGlobally}</span>
+            {/* COMMUNITY STATS */}
+            <div className={`rounded-[2.5rem] border p-6 grid grid-cols-3 gap-4 text-center transition-colors duration-300 ${
+              darkMode ? 'bg-stone-900 border-stone-800 text-stone-100' : 'bg-[#F9F8F6] border-stone-200 text-stone-900'
+            }`}>
+              <div className="flex flex-col justify-center">
+                <span className="text-2xl md:text-3xl font-sans font-bold text-emerald-500">{filteredCenters.length}</span>
+                <span className="text-[9px] md:text-[10px] uppercase tracking-widest text-stone-400 font-bold mt-2">{t.verifiedKuttabsGlobally}</span>
               </div>
-
-              {/* Community Review */}
-              <div className="md:col-span-2 bg-stone-900 text-stone-400 rounded-[2.5rem] p-6 flex flex-col sm:flex-row justify-between items-center gap-6 text-start border border-stone-850">
-                <div className="flex-1">
-                  <p className="text-xs leading-relaxed italic font-serif text-stone-300">
-                    "{t.nomadQuote}"
-                  </p>
-                  <div className="mt-2.5 flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full bg-stone-700"></div>
-                    <span className="text-[9px] uppercase tracking-widest font-bold text-stone-400">{t.nomadQuoteAuthor}</span>
-                  </div>
-                </div>
-                <div className="hidden sm:block h-12 w-px bg-stone-850"></div>
-                <div className="flex items-center gap-4 text-white shrink-0">
-                  <div>
-                    <div className="text-xl font-bold font-serif italic text-amber-100">4.9 / 5.0</div>
-                    <div className="text-[8px] text-stone-500 uppercase font-black tracking-widest">{lang === 'ar' ? 'تقييم المسافرين العالمي' : 'Global Traveler Rating'}</div>
-                  </div>
-                  <Compass className="w-5 h-5 text-emerald-650 animate-spin-slow" />
-                </div>
+              <div className="flex flex-col justify-center border-l border-stone-200 dark:border-stone-800">
+                <span className="text-2xl md:text-3xl font-sans font-bold text-emerald-500">{new Set(filteredCenters.map(c => c.city)).size}</span>
+                <span className="text-[9px] md:text-[10px] uppercase tracking-widest text-stone-400 font-bold mt-2">{t.citiesCovered}</span>
+              </div>
+              <div className="flex flex-col justify-center border-l border-stone-200 dark:border-stone-800">
+                <span className="text-2xl md:text-3xl font-sans font-bold text-emerald-500">{filteredCenters.reduce((sum, c) => sum + (c.reviewsCount || 0), 0)}</span>
+                <span className="text-[9px] md:text-[10px] uppercase tracking-widest text-stone-400 font-bold mt-2">{t.totalReviews}</span>
               </div>
             </div>
 
@@ -2267,8 +1854,8 @@ export default function App() {
               darkMode ? 'bg-stone-900 border-stone-800' : 'bg-white border-stone-200'
             }`}>
               
-              {/* Search text and dropdown */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Search text and dropdowns */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 {/* Search Text */}
                 <div className="relative md:col-span-2">
                   <Search className="absolute start-3.5 top-1/2 transform -translate-y-1/2 text-stone-400 w-4 h-4" />
@@ -2284,22 +1871,53 @@ export default function App() {
                   />
                 </div>
 
+                {/* Country Dropdown */}
+                <div className="relative">
+                  <select
+                    value={filterCountry}
+                    onChange={(e) => {
+                      setFilterCountry(e.target.value);
+                      setFilterCity('all');
+                    }}
+                    className={`w-full ${lang === 'ar' ? 'pl-10 pr-4' : 'pr-10 pl-4'} py-3 border rounded-2xl text-xs appearance-none focus:ring-2 focus:ring-emerald-500/20 focus:border-[#064E3B] transition font-bold cursor-pointer ${
+                      darkMode
+                        ? 'bg-stone-900 border-stone-800 text-stone-300 hover:bg-stone-850'
+                        : 'bg-white border-stone-300 hover:border-stone-400 text-stone-800 shadow-sm hover:shadow'
+                    }`}
+                    id="filter-country-select"
+                  >
+                    <option value="all">🌍 {lang === 'ar' ? 'كل الدول' : 'All Countries'}</option>
+                    {countriesList.map(c => (
+                      <option key={c.isoCode} value={c.name}>{c.flag} {c.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400 pointer-events-none ${
+                    lang === 'ar' ? 'left-3' : 'right-3'
+                  }`} />
+                </div>
+
                 {/* City Dropdown */}
                 <div className="relative">
                   <select
                     value={filterCity}
                     onChange={(e) => setFilterCity(e.target.value)}
-                    className={`w-full ${lang === 'ar' ? 'pl-10 pr-4' : 'pr-10 pl-4'} py-3 border rounded-2xl text-xs appearance-none focus:ring-2 focus:ring-emerald-500/20 focus:border-[#064E3B] transition font-bold cursor-pointer ${
-                      darkMode 
-                        ? 'bg-stone-900 border-stone-800 text-stone-300 hover:bg-stone-850' 
+                    disabled={filterCountry === 'all' && filterCitiesOfCountry.length === 0}
+                    className={`w-full ${lang === 'ar' ? 'pl-10 pr-4' : 'pr-10 pl-4'} py-3 border rounded-2xl text-xs appearance-none focus:ring-2 focus:ring-emerald-500/20 focus:border-[#064E3B] transition font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                      darkMode
+                        ? 'bg-stone-900 border-stone-800 text-stone-300 hover:bg-stone-850'
                         : 'bg-white border-stone-300 hover:border-stone-400 text-stone-800 shadow-sm hover:shadow'
                     }`}
                     id="filter-city-select"
                   >
                     <option value="all">🗺️ {lang === 'ar' ? 'كل المدن' : 'All Cities'}</option>
-                    {uniqueCities.map(city => (
-                      <option key={city} value={city}>📍 {city}</option>
-                    ))}
+                    {filterCountry !== 'all' && filterCitiesOfCountry.length > 0
+                      ? filterCitiesOfCountry.map(ct => (
+                          <option key={ct.name} value={ct.name}>📍 {ct.name}</option>
+                        ))
+                      : uniqueCities.map(city => (
+                          <option key={city} value={city}>📍 {city}</option>
+                        ))
+                    }
                   </select>
                   <ChevronDown className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400 pointer-events-none ${
                     lang === 'ar' ? 'left-3' : 'right-3'
@@ -2312,22 +1930,6 @@ export default function App() {
                 
                 {/* Filters Row */}
                 <div className="flex flex-wrap items-center gap-3">
-                  {/* Drop-In Filter */}
-                  <label className={`flex items-center gap-2 cursor-pointer border px-4 py-2 rounded-xl text-xs font-bold transition ${
-                    darkMode 
-                      ? 'bg-stone-900 hover:bg-stone-850 border-stone-800 text-stone-300' 
-                      : 'bg-white hover:bg-stone-50 border-stone-300 text-stone-700 shadow-sm'
-                  }`}>
-                    <input
-                      type="checkbox"
-                      checked={filterDropIn}
-                      onChange={(e) => setFilterDropIn(e.target.checked)}
-                      className="accent-emerald-900 w-3.5 h-3.5 rounded"
-                      id="filter-drop-in-checkbox"
-                    />
-                    ✨ {t.welcomesDropins}
-                  </label>
-
                   {/* Offers Courses Filter */}
                   <label className={`flex items-center gap-2 cursor-pointer border px-4 py-2 rounded-xl text-xs font-bold transition ${
                     darkMode 
@@ -2344,98 +1946,15 @@ export default function App() {
                     🎓 {t.coursesFilter || (lang === 'ar' ? 'تقدم دورات ومحاضرات' : 'Offers Courses/Seminars')}
                   </label>
 
-                  {/* Gender Filter */}
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider hidden sm:inline">{lang === 'ar' ? 'الجنس:' : 'Gender:'}</span>
-                    <div className="relative">
-                      <select
-                        value={filterGender}
-                        onChange={(e) => setFilterGender(e.target.value)}
-                        className={`appearance-none ${lang === 'ar' ? 'pl-8 pr-3' : 'pr-8 pl-3'} py-2 border rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-[#064E3B] transition duration-200 cursor-pointer ${
-                          darkMode 
-                            ? 'bg-stone-900 border-stone-800 text-stone-300 hover:bg-stone-850' 
-                            : 'bg-white border-stone-300 hover:border-stone-400 text-stone-700 shadow-sm hover:shadow'
-                        }`}
-                        id="filter-gender-select"
-                      >
-                        <option value="all">{lang === 'ar' ? 'مختلط / كل الأجناس' : 'Mixed / All Genders'}</option>
-                        <option value="men">{lang === 'ar' ? 'رجال فقط' : 'Men Only'}</option>
-                        <option value="women">{lang === 'ar' ? 'نساء فقط' : 'Women Only'}</option>
-                        <option value="boys">{lang === 'ar' ? 'أولاد فقط' : 'Boys Only'}</option>
-                        <option value="girls">{lang === 'ar' ? 'بنات فقط' : 'Girls Only'}</option>
-                      </select>
-                      <ChevronDown className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 text-stone-400 pointer-events-none ${
-                        lang === 'ar' ? 'left-2' : 'right-2'
-                      }`} />
-                    </div>
-                  </div>
-
-                  {/* Language Filter */}
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider hidden sm:inline">{lang === 'ar' ? 'اللغة:' : 'Language:'}</span>
-                    <div className="relative">
-                      <select
-                        value={filterLanguage}
-                        onChange={(e) => setFilterLanguage(e.target.value)}
-                        className={`appearance-none ${lang === 'ar' ? 'pl-8 pr-3' : 'pr-8 pl-3'} py-2 border rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-[#064E3B] transition duration-200 cursor-pointer ${
-                          darkMode 
-                            ? 'bg-stone-900 border-stone-800 text-stone-300 hover:bg-stone-850' 
-                            : 'bg-white border-stone-300 hover:border-stone-400 text-stone-700 shadow-sm hover:shadow'
-                        }`}
-                        id="filter-language-select"
-                      >
-                        <option value="all">{lang === 'ar' ? 'كل اللغات' : 'All Languages'}</option>
-                        <option value="العربية">{lang === 'ar' ? 'العربية' : 'Arabic'}</option>
-                        <option value="الإنجليزية">{lang === 'ar' ? 'الإنجليزية' : 'English'}</option>
-                        <option value="الفرنسية">{lang === 'ar' ? 'الفرنسية' : 'French'}</option>
-                        <option value="التركية">{lang === 'ar' ? 'التركية' : 'Turkish'}</option>
-                        <option value="الملايوية">{lang === 'ar' ? 'الملايوية' : 'Malay'}</option>
-                      </select>
-                      <ChevronDown className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 text-stone-400 pointer-events-none ${
-                        lang === 'ar' ? 'left-2' : 'right-2'
-                      }`} />
-                    </div>
-                  </div>
-
-                  {/* Recitation Filter */}
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider hidden sm:inline">{lang === 'ar' ? 'الرواية:' : 'Recitation:'}</span>
-                    <div className="relative">
-                      <select
-                        value={filterRecitation}
-                        onChange={(e) => setFilterRecitation(e.target.value)}
-                        className={`appearance-none ${lang === 'ar' ? 'pl-8 pr-3' : 'pr-8 pl-3'} py-2 border rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500/10 focus:border-[#064E3B] transition duration-200 cursor-pointer ${
-                          darkMode 
-                            ? 'bg-stone-900 border-stone-800 text-stone-300 hover:bg-stone-850' 
-                            : 'bg-white border-stone-300 hover:border-stone-400 text-stone-700 shadow-sm hover:shadow'
-                        }`}
-                        id="filter-recitation-select"
-                      >
-                        <option value="all">{lang === 'ar' ? 'كل الروايات' : 'All Recitations'}</option>
-                        <option value="ورش">{lang === 'ar' ? 'ورش عن نافع' : 'Warsh'}</option>
-                        <option value="حفص">{lang === 'ar' ? 'حفص عن عاصم' : 'Hafs'}</option>
-                        <option value="قالون">{lang === 'ar' ? 'قالون عن نافع' : 'Qalun'}</option>
-                        <option value="الدوري">{lang === 'ar' ? 'الدوري عن أبي عمرو' : 'Al-Duri'}</option>
-                        <option value="بدون حفظ">{lang === 'ar' ? 'لا يوجد محفظ' : 'None (Unsupported Hifz)'}</option>
-                      </select>
-                      <ChevronDown className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 text-stone-400 pointer-events-none ${
-                        lang === 'ar' ? 'left-2' : 'right-2'
-                      }`} />
-                    </div>
-                  </div>
-
                 </div>
 
                 {/* Reset Filters */}
-                {(searchQuery || filterCity !== 'all' || filterDropIn || filterGender !== 'all' || filterLanguage !== 'all' || filterRecitation !== 'all' || filterOffersCourses) && (
+                {(searchQuery || filterCountry !== 'all' || filterCity !== 'all' || filterOffersCourses) && (
                   <button
                     onClick={() => {
                       setSearchQuery('');
+                      setFilterCountry('all');
                       setFilterCity('all');
-                      setFilterDropIn(false);
-                      setFilterGender('all');
-                      setFilterLanguage('all');
-                      setFilterRecitation('all');
                       setFilterOffersCourses(false);
                     }}
                     className="text-xs font-bold text-emerald-900 hover:text-emerald-950 hover:underline transition cursor-pointer"
@@ -2544,16 +2063,7 @@ export default function App() {
                           <div className={`flex flex-wrap items-center gap-2 mt-5 pt-4 border-t text-[10px] font-bold ${
                             darkMode ? 'border-stone-800 text-stone-400' : 'border-stone-100 text-stone-600'
                           }`}>
-                            <span className={`px-3 py-1.5 rounded-xl border ${
-                              darkMode ? 'bg-stone-800 text-stone-300 border-stone-700' : 'bg-stone-100 text-stone-700 border-stone-200'
-                            }`}>
-                              👥 {getGenderLabel(center.gender)}
-                            </span>
-                            <span className={`px-3 py-1.5 rounded-xl border ${
-                              darkMode ? 'bg-stone-800 text-stone-300 border-stone-700' : 'bg-stone-100 text-stone-700 border-stone-200'
-                            }`}>
-                              🤝 {center.dropInWelcomed ? (lang === 'ar' ? 'يرحب بالزوار والمسافرين' : 'Welcomes travelers') : (lang === 'ar' ? 'التسجيل مسبقاً مطلوب' : 'Prior registration required')}
-                            </span>
+
                             {center.offersCourses && (
                               <span className={`px-3 py-1.5 rounded-xl border ${
                                 darkMode ? 'bg-blue-950/25 text-blue-300 border-blue-900/50' : 'bg-blue-50 text-blue-900 border-blue-200'
@@ -2665,61 +2175,9 @@ export default function App() {
                                   </span>
                                 </div>
 
-                                <div>
-                                  <span className="font-bold text-stone-400 uppercase text-[9px] tracking-wide flex items-center gap-1 mb-1.5">
-                                    <Users className="w-3.5 h-3.5 text-indigo-500" />
-                                    {lang === 'ar' ? 'الجنس المستهدف' : 'Gender Target'}
-                                  </span>
-                                  <span className={`font-bold text-xs ${darkMode ? 'text-stone-200' : 'text-stone-850'}`}>
-                                    {getGenderLabel(center.gender)}
-                                  </span>
-                                </div>
 
-                                <div>
-                                  <span className="font-bold text-stone-400 uppercase text-[9px] tracking-wide flex items-center gap-1 mb-1.5">
-                                    <ShieldCheck className="w-3.5 h-3.5 text-teal-500" />
-                                    {lang === 'ar' ? 'سياسة الزيارة' : 'Visitor Policy'}
-                                  </span>
-                                  <span className={`font-bold text-xs ${darkMode ? 'text-stone-200' : 'text-stone-850'}`}>
-                                    {center.dropInWelcomed ? (lang === 'ar' ? 'يرحب بالزوار والمسافرين' : 'Welcomes travelers & drop-ins') : (lang === 'ar' ? 'التسجيل مسبقاً مطلوب' : 'Prior registration required')}
-                                  </span>
-                                </div>
 
-                                <div>
-                                  <span className="font-bold text-stone-400 uppercase text-[9px] tracking-wide flex items-center gap-1 mb-1.5">
-                                    <Languages className="w-3.5 h-3.5 text-blue-500" />
-                                    {lang === 'ar' ? 'لغات التواصل' : 'Communication'}
-                                  </span>
-                                  <div className="flex flex-wrap gap-1 mt-0.5">
-                                    {center.languages && center.languages.length > 0 ? (
-                                      center.languages.map(l => (
-                                        <span key={l} className="px-1.5 py-0.5 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 rounded text-[10px] font-bold">
-                                          {getLanguageLabel(l)}
-                                        </span>
-                                      ))
-                                    ) : (
-                                      <span className="text-stone-400">-</span>
-                                    )}
-                                  </div>
-                                </div>
 
-                                <div>
-                                  <span className="font-bold text-stone-400 uppercase text-[9px] tracking-wide flex items-center gap-1 mb-1.5">
-                                    <BookOpen className="w-3.5 h-3.5 text-purple-500" />
-                                    {lang === 'ar' ? 'روايات التلاوة' : 'Recitations'}
-                                  </span>
-                                  <div className="flex flex-wrap gap-1 mt-0.5 font-sans">
-                                    {center.recitationStyles && center.recitationStyles.length > 0 ? (
-                                      center.recitationStyles.map(r => (
-                                        <span key={r} className="px-1.5 py-0.5 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 rounded text-[10px] font-bold">
-                                          {getRecitationLabel(r)}
-                                        </span>
-                                      ))
-                                    ) : (
-                                      <span className="text-stone-400">-</span>
-                                    )}
-                                  </div>
-                                </div>
                               </div>
 
                               {/* Host contact cards */}
@@ -2956,14 +2414,7 @@ export default function App() {
                                     <div className="text-center py-4 space-y-3">
                                       <p className="text-[10px] text-stone-400 leading-relaxed max-w-xs mx-auto">{lang === 'ar' ? 'سجل الدخول للمشاركة بالتقييم وتزكية هذا المكان' : 'Sign in to write a review and vouch for this space'}</p>
                                       <div className="flex flex-col sm:flex-row gap-2 justify-center items-center">
-                                        <button
-                                          type="button"
-                                          onClick={handleGuestSignIn}
-                                          className="px-4 py-2 bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-750 text-stone-700 dark:text-stone-300 text-[10px] font-bold rounded-xl shadow hover:scale-105 transition-all cursor-pointer active:scale-95 border dark:border-stone-700"
-                                          id="review-guest-signin-btn"
-                                        >
-                                          {lang === 'ar' ? 'الدخول السريع كزائر' : 'Quick Guest Sign-In'}
-                                        </button>
+
                                         <button
                                           type="button"
                                           onClick={handleGoogleSignIn}
@@ -3047,13 +2498,7 @@ export default function App() {
                   {t.authRequiredDesc}
                 </p>
                 <div className="flex flex-col sm:flex-row gap-2.5 justify-center items-center">
-                  <button
-                    onClick={handleGuestSignIn}
-                    className="w-full sm:w-auto px-5 py-3 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-750 text-stone-700 dark:text-stone-300 font-bold text-xs rounded-full border dark:border-stone-700 cursor-pointer transition-all active:scale-95"
-                    id="host-guest-signin-btn"
-                  >
-                    {lang === 'ar' ? 'دخول سريع كزائر' : 'Quick Guest Sign-In'}
-                  </button>
+
                   <button
                     onClick={handleGoogleSignIn}
                     className="w-full sm:w-auto px-6 py-3 bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs rounded-full shadow border border-emerald-900 transition-all cursor-pointer active:scale-95"
@@ -3063,6 +2508,7 @@ export default function App() {
                   </button>
                 </div>
               </div>
+
             ) : (userProfile?.role !== 'host' && userProfile?.role !== 'admin') ? (
               /* If logged in but signed up as traveler */
               <div className={`border rounded-[2.5rem] p-10 text-center max-w-md mx-auto shadow-sm space-y-5 transition-colors duration-300 ${
@@ -3142,36 +2588,20 @@ export default function App() {
                       />
                     </div>
 
-                    {/* Teacher & Hours */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className={`block font-bold mb-1.5 ${darkMode ? 'text-stone-300' : 'text-stone-600'}`}>{t.teacherNameLabel}</label>
-                        <input
-                          type="text"
-                          required
-                          placeholder={lang === 'ar' ? 'مثال: الشيخ عبد الكبير' : 'e.g. Sheikh Abdelkabir'}
-                          value={hostNewCenter.teacherName}
-                          onChange={e => setHostNewCenter({ ...hostNewCenter, teacherName: e.target.value })}
-                          className={`w-full px-4 py-3 border rounded-2xl text-start focus:ring-2 focus:ring-emerald-500/20 focus:border-[#064E3B] transition ${
-                            darkMode ? 'bg-stone-850 border-stone-800 text-white' : 'bg-stone-50 border-stone-200 text-stone-900'
-                          }`}
-                          id="center-teacher-input"
-                        />
-                      </div>
-                      <div>
-                        <label className={`block font-bold mb-1.5 ${darkMode ? 'text-stone-300' : 'text-stone-600'}`}>{t.operatingHoursLabel}</label>
-                        <input
-                          type="text"
-                          required
-                          placeholder={lang === 'ar' ? 'مثال: يومياً من 8 صباحاً إلى 11 صباحاً' : 'e.g. Weekdays: 8:00 AM - 11:00 AM'}
-                          value={hostNewCenter.operatingHours}
-                          onChange={e => setHostNewCenter({ ...hostNewCenter, operatingHours: e.target.value })}
-                          className={`w-full px-4 py-3 border rounded-2xl text-start focus:ring-2 focus:ring-emerald-500/20 focus:border-[#064E3B] transition ${
-                            darkMode ? 'bg-stone-850 border-stone-800 text-white' : 'bg-stone-50 border-stone-200 text-stone-900'
-                          }`}
-                          id="center-hours-input"
-                        />
-                      </div>
+                    {/* Hours */}
+                    <div>
+                      <label className={`block font-bold mb-1.5 ${darkMode ? 'text-stone-300' : 'text-stone-600'}`}>{t.operatingHoursLabel}</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder={lang === 'ar' ? 'مثال: يومياً من 8 صباحاً إلى 11 صباحاً' : 'e.g. Weekdays: 8:00 AM - 11:00 AM'}
+                        value={hostNewCenter.operatingHours}
+                        onChange={e => setHostNewCenter({ ...hostNewCenter, operatingHours: e.target.value })}
+                        className={`w-full px-4 py-3 border rounded-2xl text-start focus:ring-2 focus:ring-emerald-500/20 focus:border-[#064E3B] transition ${
+                          darkMode ? 'bg-stone-850 border-stone-800 text-white' : 'bg-stone-50 border-stone-200 text-stone-900'
+                        }`}
+                        id="center-hours-input"
+                      />
                     </div>
 
                     {/* Address details */}
@@ -3307,130 +2737,19 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* Details Specification Box */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Gender Choice */}
-                      <div>
-                        <label className={`block font-bold mb-1.5 ${darkMode ? 'text-stone-300' : 'text-stone-600'}`}>{t.genderLabel}</label>
-                        <div className="relative">
-                          <select
-                            value={hostNewCenter.gender}
-                            onChange={e => setHostNewCenter({ ...hostNewCenter, gender: e.target.value as TahfidCenter['gender'] })}
-                            className={`w-full appearance-none ${lang === 'ar' ? 'pl-10 pr-4' : 'pr-10 pl-4'} py-3 border rounded-2xl focus:ring-2 focus:ring-emerald-500/20 focus:border-[#064E3B] transition font-bold cursor-pointer ${
-                              darkMode ? 'bg-stone-900 border-stone-800 text-stone-200 hover:bg-stone-850' : 'bg-white border-stone-300 hover:border-stone-400 text-stone-800 shadow-sm hover:shadow'
-                            }`}
-                            id="center-gender-select"
-                          >
-                            <option value="mixed">{lang === 'ar' ? 'مختلط' : 'Mixed Genders'}</option>
-                            <option value="men">{lang === 'ar' ? 'رجال فقط' : 'Men Only'}</option>
-                            <option value="women">{lang === 'ar' ? 'نساء فقط' : 'Women Only'}</option>
-                            <option value="boys">{lang === 'ar' ? 'أولاد فقط' : 'Boys Only'}</option>
-                            <option value="girls">{lang === 'ar' ? 'بنات فقط' : 'Girls Only'}</option>
-                          </select>
-                          <ChevronDown className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400 pointer-events-none ${
-                            lang === 'ar' ? 'left-3.5' : 'right-3.5'
-                          }`} />
-                        </div>
-                      </div>
-
-                      {/* Options Checkboxes */}
-                      <div className="flex flex-col justify-center space-y-2.5 pt-2">
-                        {/* Drop-In Checkbox */}
-                        <label className={`flex items-center gap-2 cursor-pointer font-bold ${darkMode ? 'text-stone-300' : 'text-stone-700'}`}>
-                          <input
-                            type="checkbox"
-                            checked={hostNewCenter.dropInWelcomed}
-                            onChange={e => setHostNewCenter({ ...hostNewCenter, dropInWelcomed: e.target.checked })}
-                            className="accent-emerald-700 w-4 h-4 rounded cursor-pointer"
-                            id="center-dropin-checkbox"
-                          />
-                          🤝 {t.welcomeVisitors}
-                        </label>
-
-                        {/* Offers Courses Checkbox */}
-                        <label className={`flex items-center gap-2 cursor-pointer font-bold ${darkMode ? 'text-stone-300' : 'text-stone-700'}`}>
-                          <input
-                            type="checkbox"
-                            checked={hostNewCenter.offersCourses}
-                            onChange={e => setHostNewCenter({ ...hostNewCenter, offersCourses: e.target.checked })}
-                            className="accent-emerald-700 w-4 h-4 rounded cursor-pointer"
-                            id="center-offerscourses-checkbox-form"
-                          />
-                          🎓 {t.offersCoursesLabel || (lang === 'ar' ? 'تقدم دورات ومحاضرات' : 'Offers courses & seminars')}
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Supported Languages Checklist */}
-                    <div>
-                      <label className={`block font-bold mb-1.5 ${darkMode ? 'text-stone-300' : 'text-stone-600'}`}>
-                        🌐 {lang === 'ar' ? 'لغات التواصل المتحدثة' : 'Communication Languages'}
+                    {/* Options Checkboxes */}
+                    <div className="pt-2">
+                      {/* Offers Courses Checkbox */}
+                      <label className={`flex items-center gap-2 cursor-pointer font-bold ${darkMode ? 'text-stone-300' : 'text-stone-700'}`}>
+                        <input
+                          type="checkbox"
+                          checked={hostNewCenter.offersCourses}
+                          onChange={e => setHostNewCenter({ ...hostNewCenter, offersCourses: e.target.checked })}
+                          className="accent-emerald-700 w-4 h-4 rounded cursor-pointer"
+                          id="center-offerscourses-checkbox-form"
+                        />
+                        🎓 {t.offersCoursesLabel || (lang === 'ar' ? 'تقدم دورات ومحاضرات' : 'Offers courses & seminars')}
                       </label>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3.5 rounded-2xl border bg-stone-50/50 dark:bg-stone-850/40 border-stone-200 dark:border-stone-800">
-                        {[
-                          { id: 'العربية', label: lang === 'ar' ? 'العربية' : 'Arabic' },
-                          { id: 'الإنجليزية', label: lang === 'ar' ? 'الإنجليزية' : 'English' },
-                          { id: 'الفرنسية', label: lang === 'ar' ? 'الفرنسية' : 'French' },
-                          { id: 'التركية', label: lang === 'ar' ? 'التركية' : 'Turkish' },
-                          { id: 'الملايوية', label: lang === 'ar' ? 'الملايوية' : 'Malay' },
-                        ].map(langOption => {
-                          const isChecked = hostNewCenter.languages.includes(langOption.id);
-                          return (
-                            <label key={langOption.id} className="flex items-center gap-2 cursor-pointer text-xs select-none">
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={e => {
-                                  const updated = e.target.checked
-                                    ? [...hostNewCenter.languages, langOption.id]
-                                    : hostNewCenter.languages.filter(l => l !== langOption.id);
-                                  setHostNewCenter({ ...hostNewCenter, languages: updated });
-                                }}
-                                className="accent-emerald-700 w-4 h-4 rounded"
-                              />
-                              <span className={isChecked ? 'font-bold text-emerald-800 dark:text-emerald-400' : 'text-stone-600 dark:text-stone-400'}>
-                                {langOption.label}
-                              </span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Recitation Styles Checklist */}
-                    <div>
-                      <label className={`block font-bold mb-1.5 ${darkMode ? 'text-stone-300' : 'text-stone-600'}`}>
-                        📖 {lang === 'ar' ? 'روايات التلاوة المعتمدة' : 'Quranic Recitations'}
-                      </label>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3.5 rounded-2xl border bg-stone-50/50 dark:bg-stone-850/40 border-stone-200 dark:border-stone-800">
-                        {[
-                          { id: 'ورش', label: lang === 'ar' ? 'ورش عن نافع' : 'Warsh' },
-                          { id: 'حفص', label: lang === 'ar' ? 'حفص عن عاصم' : 'Hafs' },
-                          { id: 'قالون', label: lang === 'ar' ? 'قالون عن نافع' : 'Qalun' },
-                          { id: 'الدوري', label: lang === 'ar' ? 'الدوري عن أبي عمرو' : 'Al-Duri' },
-                          { id: 'بدون حفظ', label: lang === 'ar' ? 'لا يوجد محفظ' : 'None (Unsupported Hifz)' },
-                        ].map(recOption => {
-                          const isChecked = hostNewCenter.recitationStyles.includes(recOption.id);
-                          return (
-                            <label key={recOption.id} className="flex items-center gap-2 cursor-pointer text-xs select-none">
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={e => {
-                                  const updated = e.target.checked
-                                    ? [...hostNewCenter.recitationStyles, recOption.id]
-                                    : hostNewCenter.recitationStyles.filter(r => r !== recOption.id);
-                                  setHostNewCenter({ ...hostNewCenter, recitationStyles: updated });
-                                }}
-                                className="accent-emerald-700 w-4 h-4 rounded"
-                              />
-                              <span className={isChecked ? 'font-bold text-emerald-800 dark:text-emerald-400' : 'text-stone-600 dark:text-stone-400'}>
-                                {recOption.label}
-                              </span>
-                            </label>
-                          );
-                        })}
-                      </div>
                     </div>
 
                      {/* Host Contacts */}
@@ -3515,13 +2834,8 @@ export default function App() {
                               address: '',
                               city: 'Fes',
                               country: 'Morocco',
-                              dropInWelcomed: true,
-                              gender: 'mixed',
                               ageGroups: [],
-                              languages: ['العربية'],
-                              recitationStyles: ['ورش'],
                               operatingHours: '',
-                              teacherName: '',
                               contactEmail: '',
                               contactPhone: ''
                             });
@@ -3739,15 +3053,6 @@ export default function App() {
                   </p>
                 </div>
               </div>
-
-              {/* Reset/Seeding action for administrator */}
-              <button
-                onClick={handleResetAndSeedDatabase}
-                className="relative z-10 px-5 py-3 bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold rounded-2xl text-xs transition-all flex items-center justify-center gap-2 cursor-pointer border border-amber-600 shadow-sm md:self-center shrink-0"
-              >
-                <Database className="w-4 h-4" />
-                {lang === 'ar' ? "إعادة تهيئة قاعدة البيانات بالبيانات العربية" : "Reset & Seed with Arabic Data"}
-              </button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -3800,7 +3105,7 @@ export default function App() {
                                 {center.name}
                               </h4>
                               <p className="text-[10px] text-stone-400 font-medium mt-1 font-sans">
-                                📍 {center.city}, {center.country} &bull; 👤 {center.teacherName}
+                                📍 {center.city}, {center.country}
                               </p>
                             </div>
                             
@@ -3824,10 +3129,6 @@ export default function App() {
                               
                               {/* Grid of basic specs */}
                               <div className="grid grid-cols-2 gap-2 text-[11px]">
-                                <div className={`p-2.5 rounded-xl border ${darkMode ? 'bg-stone-850/60 border-stone-800' : 'bg-stone-50 border-stone-100'}`}>
-                                  <p className="text-stone-400 text-[9px] font-bold mb-0.5">{lang === 'ar' ? 'الفئة المستهدفة' : 'Gender Target'}</p>
-                                  <p className={`font-bold ${darkMode ? 'text-stone-200' : 'text-stone-800'}`}>{getGenderLabel(center.gender)}</p>
-                                </div>
                                 <div className={`p-2.5 rounded-xl border ${darkMode ? 'bg-stone-850/60 border-stone-800' : 'bg-stone-50 border-stone-100'}`}>
                                   <p className="text-stone-400 text-[9px] font-bold mb-0.5">{lang === 'ar' ? 'أوقات العمل' : 'Operating Hours'}</p>
                                   <p className={`font-bold ${darkMode ? 'text-stone-200' : 'text-stone-800'}`}>{center.operatingHours}</p>
@@ -3866,19 +3167,7 @@ export default function App() {
                                 </div>
                               </div>
 
-                              {/* Drop-in Welcome */}
-                              <div className={`p-3 rounded-xl border text-[11px] flex items-center justify-between gap-1 ${darkMode ? 'bg-stone-850/30 border-stone-800' : 'bg-stone-50/30 border-stone-100'}`}>
-                                <span className="text-stone-400 text-[9px] font-bold">{lang === 'ar' ? 'الزوار العابرون:' : 'Drop-in Visitors:'}</span>
-                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${
-                                  center.dropInWelcomed 
-                                    ? (darkMode ? 'bg-emerald-950/40 text-emerald-400' : 'bg-emerald-50 text-emerald-700')
-                                    : (darkMode ? 'bg-red-950/40 text-red-400' : 'bg-red-50 text-red-700')
-                                }`}>
-                                  {center.dropInWelcomed 
-                                    ? (lang === 'ar' ? 'مرحب بهم' : 'Welcomed') 
-                                    : (lang === 'ar' ? 'يتطلب تنسيقاً' : 'Prior RSVP')}
-                                </span>
-                              </div>
+
 
                               {/* Submitter ID */}
                               <div className="flex items-center justify-between text-[9px] text-stone-400">
@@ -3943,7 +3232,7 @@ export default function App() {
                                 {center.name}
                               </h4>
                               <p className="text-[10px] text-stone-400 font-medium mt-1">
-                                📍 {center.city}, {center.country} &bull; 👤 {center.teacherName}
+                                📍 {center.city}, {center.country}
                               </p>
                             </div>
                             
@@ -3967,10 +3256,6 @@ export default function App() {
                               
                               {/* Grid of basic specs */}
                               <div className="grid grid-cols-2 gap-2 text-[11px]">
-                                <div className={`p-2.5 rounded-xl border ${darkMode ? 'bg-stone-850/60 border-stone-800' : 'bg-stone-50 border-stone-100'}`}>
-                                  <p className="text-stone-400 text-[9px] font-bold mb-0.5">{lang === 'ar' ? 'الفئة المستهدفة' : 'Gender Target'}</p>
-                                  <p className={`font-bold ${darkMode ? 'text-stone-200' : 'text-stone-800'}`}>{getGenderLabel(center.gender)}</p>
-                                </div>
                                 <div className={`p-2.5 rounded-xl border ${darkMode ? 'bg-stone-850/60 border-stone-800' : 'bg-stone-50 border-stone-100'}`}>
                                   <p className="text-stone-400 text-[9px] font-bold mb-0.5">{lang === 'ar' ? 'أوقات العمل' : 'Operating Hours'}</p>
                                   <p className={`font-bold ${darkMode ? 'text-stone-200' : 'text-stone-800'}`}>{center.operatingHours}</p>
@@ -4009,19 +3294,7 @@ export default function App() {
                                 </div>
                               </div>
 
-                              {/* Drop-in Welcome */}
-                              <div className={`p-3 rounded-xl border text-[11px] flex items-center justify-between gap-1 ${darkMode ? 'bg-stone-850/30 border-stone-800' : 'bg-stone-50/30 border-stone-100'}`}>
-                                <span className="text-stone-400 text-[9px] font-bold">{lang === 'ar' ? 'الزوار العابرون:' : 'Drop-in Visitors:'}</span>
-                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${
-                                  center.dropInWelcomed 
-                                    ? (darkMode ? 'bg-emerald-950/40 text-emerald-400' : 'bg-emerald-50 text-emerald-700')
-                                    : (darkMode ? 'bg-red-950/40 text-red-400' : 'bg-red-50 text-red-700')
-                                }`}>
-                                  {center.dropInWelcomed 
-                                    ? (lang === 'ar' ? 'مرحب بهم' : 'Welcomed') 
-                                    : (lang === 'ar' ? 'يتطلب تنسيقاً' : 'Prior RSVP')}
-                                </span>
-                              </div>
+
 
                               {/* Submitter ID */}
                               <div className="flex items-center justify-between text-[9px] text-stone-400">
