@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   auth, 
@@ -26,7 +26,9 @@ import {
   where, 
   orderBy,
   serverTimestamp,
-  onSnapshot
+  onSnapshot,
+  getCountFromServer,
+  increment
 } from 'firebase/firestore';
 import { 
   MapPin, 
@@ -71,6 +73,36 @@ const LocationPickerMap = React.lazy(() => import('./components/LocationPickerMa
 import { translations } from './lib/translations';
 import { Logo } from './components/Logo';
 import { Country, City } from 'country-state-city';
+
+export type AppTab = 'discover' | 'host' | 'about' | 'admin';
+
+export const pathToTab = (pathname: string): AppTab => {
+  const cleanPath = pathname.toLowerCase().replace(/\/+$/, '') || '/';
+  if (cleanPath === '/add-kottab' || cleanPath === '/add' || cleanPath === '/host' || cleanPath === '/new') {
+    return 'host';
+  }
+  if (cleanPath === '/about' || cleanPath === '/heritage') {
+    return 'about';
+  }
+  if (cleanPath === '/admin') {
+    return 'admin';
+  }
+  return 'discover';
+};
+
+export const tabToPath = (tab: AppTab): string => {
+  switch (tab) {
+    case 'host':
+      return '/add-kottab';
+    case 'about':
+      return '/about';
+    case 'admin':
+      return '/admin';
+    case 'discover':
+    default:
+      return '/';
+  }
+};
 
 export default function App() {
   // Localization & Theme State
@@ -189,8 +221,69 @@ export default function App() {
   const [selectedOnboardRole, setSelectedOnboardRole] = useState<'traveler' | 'host' | 'admin' | null>(null);
   const [onboardingDisplayName, setOnboardingDisplayName] = useState('');
 
-  // App Tabs / Views
-  const [activeTab, setActiveTab] = useState<'discover' | 'host' | 'about' | 'admin'>('discover');
+  // App Tabs / Views with URL Routing
+  const [activeTab, setActiveTabState] = useState<AppTab>(() => {
+    if (typeof window !== 'undefined') {
+      return pathToTab(window.location.pathname);
+    }
+    return 'discover';
+  });
+
+  const setActiveTab = useCallback((tab: AppTab, replace = false) => {
+    setActiveTabState(tab);
+    if (typeof window !== 'undefined') {
+      const targetPath = tabToPath(tab);
+      if (window.location.pathname !== targetPath) {
+        if (replace) {
+          window.history.replaceState({ tab }, '', targetPath);
+        } else {
+          window.history.pushState({ tab }, '', targetPath);
+        }
+      }
+    }
+  }, []);
+
+  // Sync with browser back/forward buttons (popstate)
+  useEffect(() => {
+    const handlePopState = () => {
+      const currentTab = pathToTab(window.location.pathname);
+      setActiveTabState(currentTab);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    // Normalize path if user arrived on an alias like /host, /add, /new
+    const initialTab = pathToTab(window.location.pathname);
+    const canonicalPath = tabToPath(initialTab);
+    if (window.location.pathname !== canonicalPath && (window.location.pathname === '/host' || window.location.pathname === '/add' || window.location.pathname === '/new' || window.location.pathname === '/explore')) {
+      window.history.replaceState({ tab: initialTab }, '', canonicalPath);
+    }
+
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  // Update dynamic document title per route and language
+  useEffect(() => {
+    const titles: Record<AppTab, { ar: string; en: string }> = {
+      discover: {
+        ar: 'كتاتيب | بوابتك لاستكشاف الكتاتيب والجمعيات القرآنية حول العالم',
+        en: 'Katatib | Global Quranic Kuttabs & Associations Directory'
+      },
+      host: {
+        ar: 'إضافة كتّاب جديد | كتاتيب',
+        en: 'Add New Kottab | Katatib'
+      },
+      about: {
+        ar: 'تراث الكتاتيب | كتاتيب',
+        en: 'Kuttab Heritage | Katatib'
+      },
+      admin: {
+        ar: 'بوابة الإدارة والاعتماد | كتاتيب',
+        en: 'Admin Verification Portal | Katatib'
+      }
+    };
+    document.title = titles[activeTab]?.[lang] || 'Katatib';
+  }, [activeTab, lang]);
   
   // Administrative privileges check
   const isAdmin = userProfile?.role === 'admin';
@@ -205,6 +298,56 @@ export default function App() {
   const isUsingFallback = isUsingFallbackState || user?.uid?.startsWith('guest_');
   const [expandedApprovedCenters, setExpandedApprovedCenters] = useState<Record<string, boolean>>({});
   const [expandedPendingCenters, setExpandedPendingCenters] = useState<Record<string, boolean>>({});
+  const [adminUserProfiles, setAdminUserProfiles] = useState<Record<string, UserProfile>>({});
+
+  const getCreatorName = (createdBy: string) => {
+    if (createdBy === user?.uid) {
+      return userProfile?.displayName || user?.displayName || createdBy;
+    }
+    if (createdBy === 'system-scraper-pdf') {
+      return 'System';
+    }
+    return adminUserProfiles[createdBy]?.displayName || createdBy;
+  };
+
+  // Fetch all user profiles so we can show creator names anywhere
+  useEffect(() => {
+    const fetchAllUserProfiles = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'user_profiles'));
+        const profiles: Record<string, UserProfile> = {};
+        snapshot.forEach(docSnap => {
+          const data = docSnap.data() as UserProfile;
+          profiles[docSnap.id] = data;
+        });
+        setAdminUserProfiles(profiles);
+      } catch (err) {
+        console.warn('Failed to fetch user profiles:', err);
+      }
+    };
+    fetchAllUserProfiles();
+  }, []);
+
+  // Global Stats State
+  const [usersCount, setUsersCount] = useState(0);
+
+  // Fetch Centers Count for Stats
+  useEffect(() => {
+    const fetchCentersCount = async () => {
+      try {
+        const statsDoc = await getDoc(doc(db, 'stats', 'global'));
+        if (statsDoc.exists()) {
+          setUsersCount(statsDoc.data().usersCount || 0);
+        } else {
+          setUsersCount(0);
+        }
+      } catch (err) {
+        console.warn("Failed to fetch global users count", err);
+        setUsersCount(0);
+      }
+    };
+    fetchCentersCount();
+  }, []);
 
   // Search & Filters State
   const [searchQuery, setSearchQuery] = useState('');
@@ -467,10 +610,8 @@ export default function App() {
         const list: TahfidCenter[] = [];
         snapshot.forEach((doc) => {
           const data = doc.data() as TahfidCenter;
-          // Hide all pre-seeded dummy data
-          if (data.createdBy !== 'D290nfTo4SQKK99CQYt0RLekMUI2') {
-            list.push({ id: doc.id, ...data });
-          }
+          // Push all fetched data
+          list.push({ id: doc.id, ...data });
         });
         setCenters(list);
         setIsUsingFallback(false);
@@ -482,7 +623,7 @@ export default function App() {
         if (cached) {
           try {
             const parsed = JSON.parse(cached) as TahfidCenter[];
-            setCenters(parsed.filter(c => c.createdBy !== 'D290nfTo4SQKK99CQYt0RLekMUI2'));
+            setCenters(parsed);
           } catch {
             setCenters([]);
           }
@@ -624,6 +765,15 @@ export default function App() {
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         });
+
+        // Increment global users count
+        try {
+          await setDoc(doc(db, 'stats', 'global'), {
+            usersCount: increment(1)
+          }, { merge: true });
+        } catch (statErr) {
+          console.warn("Failed to increment global users count:", statErr);
+        }
 
         setUserProfile(newProfile);
         setUser(prev => prev ? Object.assign(prev, { role: newProfile.role }) : null);
@@ -1338,10 +1488,9 @@ export default function App() {
 
   // Filter Centers list
   const filteredCenters = centers.filter(center => {
-    // Standard users should only see approved centers. Admins can see everything.
-    // If a center doesn't have isApproved field, assume true (compatibility with older data/seed fallback)
+    // Only show approved centers in the main feed (admins review pending ones in the Admin tab)
     const isApproved = center.isApproved !== false;
-    if (!isApproved && !isAdmin) return false;
+    if (!isApproved) return false;
 
     const matchesSearch = 
       center.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1378,9 +1527,10 @@ export default function App() {
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
           
           {/* Logo Brand */}
-          <div 
-            onClick={() => { setActiveTab('discover'); setSelectedCenter(null); }}
-            className="flex items-center gap-2 sm:gap-3 cursor-pointer group animate-fade-in shrink-0"
+          <a 
+            href="/"
+            onClick={(e) => { e.preventDefault(); setActiveTab('discover'); setSelectedCenter(null); }}
+            className="flex items-center gap-2 sm:gap-3 cursor-pointer group animate-fade-in shrink-0 no-underline"
           >
             <div className="w-10 h-10 sm:w-13 sm:h-13 bg-emerald-950 text-emerald-400 dark:text-emerald-300 rounded-2xl flex items-center justify-center shadow-md shadow-emerald-950/15 border border-emerald-800/80 group-hover:scale-105 transition-transform duration-200 p-1.5 shrink-0">
               <Logo size={28} className="text-emerald-400 dark:text-emerald-300 sm:w-8 sm:h-8" strokeWidth={5.2} />
@@ -1398,15 +1548,16 @@ export default function App() {
               </div>
               <p className={`hidden lg:block text-[10px] font-bold ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>{t.logoTagline}</p>
             </div>
-          </div>
+          </a>
 
           {/* Center navigation controls */}
           <nav className={`hidden md:flex items-center gap-1 p-1.5 rounded-2xl border transition-colors duration-300 ${
             darkMode ? 'bg-stone-900 border-stone-800' : 'bg-stone-100 border-stone-200'
           }`}>
-            <button
-              onClick={() => { setActiveTab('discover'); setSelectedCenter(null); }}
-              className={`px-4 py-2 text-xs font-bold rounded-xl transition-all duration-200 cursor-pointer ${
+            <a
+              href="/"
+              onClick={(e) => { e.preventDefault(); setActiveTab('discover'); setSelectedCenter(null); }}
+              className={`px-4 py-2 text-xs font-bold rounded-xl transition-all duration-200 cursor-pointer no-underline ${
                 activeTab === 'discover' 
                   ? (darkMode ? 'bg-stone-800 text-white shadow-sm' : 'bg-white text-stone-950 shadow-sm') 
                   : (darkMode ? 'text-stone-400 hover:text-stone-200' : 'text-stone-600 hover:text-stone-900')
@@ -1414,10 +1565,11 @@ export default function App() {
               id="nav-discover-btn"
             >
               {t.exploreCenters}
-            </button>
-            <button
-              onClick={() => setActiveTab('host')}
-              className={`px-4 py-2 text-xs font-bold rounded-xl transition-all duration-200 cursor-pointer ${
+            </a>
+            <a
+              href="/add-kottab"
+              onClick={(e) => { e.preventDefault(); setActiveTab('host'); }}
+              className={`px-4 py-2 text-xs font-bold rounded-xl transition-all duration-200 cursor-pointer no-underline ${
                 activeTab === 'host' 
                   ? (darkMode ? 'bg-stone-800 text-white shadow-sm' : 'bg-white text-stone-950 shadow-sm') 
                   : (darkMode ? 'text-stone-400 hover:text-stone-200' : 'text-stone-600 hover:text-stone-900')
@@ -1425,10 +1577,11 @@ export default function App() {
               id="nav-host-btn"
             >
               {t.hostHub}
-            </button>
-            <button
-              onClick={() => setActiveTab('about')}
-              className={`px-4 py-2 text-xs font-bold rounded-xl transition-all duration-200 cursor-pointer ${
+            </a>
+            <a
+              href="/about"
+              onClick={(e) => { e.preventDefault(); setActiveTab('about'); }}
+              className={`px-4 py-2 text-xs font-bold rounded-xl transition-all duration-200 cursor-pointer no-underline ${
                 activeTab === 'about' 
                   ? (darkMode ? 'bg-stone-800 text-white shadow-sm' : 'bg-white text-stone-950 shadow-sm') 
                   : (darkMode ? 'text-stone-400 hover:text-stone-200' : 'text-stone-600 hover:text-stone-900')
@@ -1436,11 +1589,12 @@ export default function App() {
               id="nav-about-btn"
             >
               {t.heritage}
-            </button>
+            </a>
             {isAdmin && (
-              <button
-                onClick={() => setActiveTab('admin')}
-                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all duration-200 cursor-pointer flex items-center gap-1.5 ${
+              <a
+                href="/admin"
+                onClick={(e) => { e.preventDefault(); setActiveTab('admin'); }}
+                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all duration-200 cursor-pointer no-underline flex items-center gap-1.5 ${
                   activeTab === 'admin' 
                     ? (darkMode ? 'bg-amber-950/40 text-amber-300 shadow-sm border border-amber-900/30' : 'bg-amber-50 text-amber-950 shadow-sm border border-amber-100') 
                     : (darkMode ? 'text-amber-500 hover:text-amber-400' : 'text-[#D97706] hover:text-[#B45309]')
@@ -1449,7 +1603,7 @@ export default function App() {
               >
                 <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
                 {t.adminPortal}
-              </button>
+              </a>
             )}
           </nav>
 
@@ -1610,43 +1764,47 @@ export default function App() {
       <div className={`md:hidden fixed bottom-0 left-0 right-0 z-50 border-t px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] flex justify-around transition-colors duration-300 shadow-[0_-4px_20px_-10px_rgba(0,0,0,0.1)] ${
         darkMode ? 'bg-stone-950/90 backdrop-blur-xl border-stone-800/60' : 'bg-white/90 backdrop-blur-xl border-stone-200/60'
       }`}>
-        <button
-          onClick={() => { setActiveTab('discover'); setSelectedCenter(null); }}
-          className={`flex flex-col items-center gap-1 text-[11px] font-semibold transition-all ${
+        <a
+          href="/"
+          onClick={(e) => { e.preventDefault(); setActiveTab('discover'); setSelectedCenter(null); }}
+          className={`flex flex-col items-center gap-1 text-[11px] font-semibold transition-all no-underline ${
             activeTab === 'discover' ? 'text-emerald-600 dark:text-emerald-400 font-bold -translate-y-0.5' : (darkMode ? 'text-stone-400 hover:text-stone-300' : 'text-slate-500 hover:text-slate-700')
           }`}
         >
           <Compass className={`w-5 h-5 ${activeTab === 'discover' ? 'drop-shadow-sm' : ''}`} />
           {t.exploreCenters}
-        </button>
-        <button
-          onClick={() => setActiveTab('host')}
-          className={`flex flex-col items-center gap-1 text-[11px] font-semibold transition-all ${
+        </a>
+        <a
+          href="/add-kottab"
+          onClick={(e) => { e.preventDefault(); setActiveTab('host'); }}
+          className={`flex flex-col items-center gap-1 text-[11px] font-semibold transition-all no-underline ${
             activeTab === 'host' ? 'text-emerald-600 dark:text-emerald-400 font-bold -translate-y-0.5' : (darkMode ? 'text-stone-400 hover:text-stone-300' : 'text-slate-500 hover:text-slate-700')
           }`}
         >
           <Plus className={`w-5 h-5 ${activeTab === 'host' ? 'drop-shadow-sm' : ''}`} />
           {t.hostHub}
-        </button>
-        <button
-          onClick={() => setActiveTab('about')}
-          className={`flex flex-col items-center gap-1 text-[11px] font-semibold transition-all ${
+        </a>
+        <a
+          href="/about"
+          onClick={(e) => { e.preventDefault(); setActiveTab('about'); }}
+          className={`flex flex-col items-center gap-1 text-[11px] font-semibold transition-all no-underline ${
             activeTab === 'about' ? 'text-emerald-600 dark:text-emerald-400 font-bold -translate-y-0.5' : (darkMode ? 'text-stone-400 hover:text-stone-300' : 'text-slate-500 hover:text-slate-700')
           }`}
         >
           <BookOpen className={`w-5 h-5 ${activeTab === 'about' ? 'drop-shadow-sm' : ''}`} />
           {t.heritage}
-        </button>
+        </a>
         {isAdmin && (
-          <button
-            onClick={() => setActiveTab('admin')}
-            className={`flex flex-col items-center gap-1 text-[11px] font-semibold transition-all ${
+          <a
+            href="/admin"
+            onClick={(e) => { e.preventDefault(); setActiveTab('admin'); }}
+            className={`flex flex-col items-center gap-1 text-[11px] font-semibold transition-all no-underline ${
               activeTab === 'admin' ? 'text-amber-600 dark:text-amber-400 font-bold -translate-y-0.5' : (darkMode ? 'text-stone-400 hover:text-amber-300' : 'text-slate-500 hover:text-[#B45309]')
             }`}
           >
             <ShieldCheck className={`w-5 h-5 ${activeTab === 'admin' ? 'drop-shadow-sm text-amber-500' : ''}`} />
             {t.adminPortal}
-          </button>
+          </a>
         )}
       </div>
 
@@ -1780,16 +1938,49 @@ export default function App() {
                 {/* Backlight glow */}
                 <div className="absolute right-0 bottom-0 top-0 w-1/2 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-emerald-800/80 via-emerald-900/40 to-transparent pointer-events-none" />
                 
-                <div className="relative z-10 max-w-2xl">
-                  <span className="text-[10px] font-bold tracking-wider bg-emerald-800 text-amber-200 px-3 py-1.5 rounded-full uppercase">
-                    🌍 Quranic Fellowship
-                  </span>
-                  <h1 className="text-3xl md:text-4.5xl font-serif font-bold tracking-tight text-white mt-6 leading-tight">
-                    {t.heroHeadline}
-                  </h1>
-                  <p className="text-xs md:text-sm text-emerald-100/90 leading-relaxed mt-4 max-w-xl">
-                    {t.heroSubheadline}
-                  </p>
+                <div className="relative z-10 max-w-2xl flex flex-col justify-between h-full">
+                  <div>
+                    <span className="text-[10px] font-bold tracking-wider bg-emerald-800 text-amber-200 px-3 py-1.5 rounded-full uppercase">
+                      🌍 Quranic Fellowship
+                    </span>
+                    <h1 className="text-3xl md:text-4.5xl font-serif font-bold tracking-tight text-white mt-6 leading-tight">
+                      {t.heroHeadline}
+                    </h1>
+                    <p className="text-xs md:text-sm text-emerald-100/90 leading-relaxed mt-4 max-w-xl">
+                      {t.heroSubheadline}
+                    </p>
+                  </div>
+                  
+                  {/* Stats Row */}
+                  <div className="mt-8 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 border-t border-emerald-800/50 pt-6">
+                    {(() => {
+                      const approvedCenters = centers.filter(c => c.isApproved !== false);
+                      return (
+                        <>
+                          <div>
+                      <div className="text-2xl font-bold text-amber-300">{usersCount}</div>
+                      <div className="text-[10px] uppercase tracking-wider font-semibold text-emerald-200 mt-1">{t.activeUsers}</div>
+                    </div>
+                    <div>
+                          <div className="text-2xl font-bold text-amber-300">{approvedCenters.length}</div>
+                          <div className="text-[10px] uppercase tracking-wider font-semibold text-emerald-200 mt-1">{t.verifiedKuttabsGlobally}</div>
+                        </div>
+                        <div>
+                          <div className="text-2xl font-bold text-amber-300">{new Set(approvedCenters.map(c => c.country)).size}</div>
+                          <div className="text-[10px] uppercase tracking-wider font-semibold text-emerald-200 mt-1">{t.countriesCovered}</div>
+                        </div>
+                        <div>
+                          <div className="text-2xl font-bold text-amber-300">{new Set(approvedCenters.map(c => c.city)).size}</div>
+                          <div className="text-[10px] uppercase tracking-wider font-semibold text-emerald-200 mt-1">{t.citiesCovered}</div>
+                        </div>
+                        <div>
+                      <div className="text-2xl font-bold text-amber-300">{approvedCenters.reduce((sum, c) => sum + (c.reviewsCount || 0), 0)}</div>
+                          <div className="text-[10px] uppercase tracking-wider font-semibold text-emerald-200 mt-1">{t.totalReviews}</div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                  </div>
                 </div>
               </div>
 
@@ -1833,23 +2024,7 @@ export default function App() {
               </React.Suspense>
             </div>
 
-            {/* COMMUNITY STATS */}
-            <div className={`rounded-[2.5rem] border p-6 grid grid-cols-3 gap-4 text-center transition-colors duration-300 ${
-              darkMode ? 'bg-stone-900 border-stone-800 text-stone-100' : 'bg-[#F9F8F6] border-stone-200 text-stone-900'
-            }`}>
-              <div className="flex flex-col justify-center">
-                <span className="text-2xl md:text-3xl font-sans font-bold text-emerald-500">{filteredCenters.length}</span>
-                <span className="text-[9px] md:text-[10px] uppercase tracking-widest text-stone-400 font-bold mt-2">{t.verifiedKuttabsGlobally}</span>
-              </div>
-              <div className="flex flex-col justify-center border-l border-stone-200 dark:border-stone-800">
-                <span className="text-2xl md:text-3xl font-sans font-bold text-emerald-500">{new Set(filteredCenters.map(c => c.city)).size}</span>
-                <span className="text-[9px] md:text-[10px] uppercase tracking-widest text-stone-400 font-bold mt-2">{t.citiesCovered}</span>
-              </div>
-              <div className="flex flex-col justify-center border-l border-stone-200 dark:border-stone-800">
-                <span className="text-2xl md:text-3xl font-sans font-bold text-emerald-500">{filteredCenters.reduce((sum, c) => sum + (c.reviewsCount || 0), 0)}</span>
-                <span className="text-[9px] md:text-[10px] uppercase tracking-widest text-stone-400 font-bold mt-2">{t.totalReviews}</span>
-              </div>
-            </div>
+
 
             {/* SEARCH AND FILTERS */}
             <div className={`border rounded-[2.5rem] p-6 md:p-8 shadow-sm space-y-4 transition-colors duration-300 ${
@@ -2025,13 +2200,6 @@ export default function App() {
                                 }`}>
                                   📍 {center.city}, {center.country}
                                 </span>
-                                {center.dropInWelcomed && (
-                                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                                    darkMode ? 'text-emerald-300 bg-emerald-950 border border-emerald-900' : 'text-emerald-900 bg-emerald-100/70'
-                                  }`}>
-                                    ✨ {t.welcomesDropins}
-                                  </span>
-                                )}
                                 {center.offersCourses && (
                                   <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
                                     darkMode ? 'text-blue-300 bg-blue-950 border border-blue-900' : 'text-blue-900 bg-blue-100/70'
@@ -2156,17 +2324,7 @@ export default function App() {
                               </div>
 
                               {/* Operating specifications */}
-                              <div className="grid grid-cols-2 gap-x-4 gap-y-5 text-xs pt-1">
-                                <div>
-                                  <span className="font-bold text-stone-400 uppercase text-[9px] tracking-wide flex items-center gap-1 mb-1">
-                                    <UserIcon className="w-3.5 h-3.5 text-emerald-500" />
-                                    {t.teacherName}
-                                  </span>
-                                  <span className={`font-bold text-xs ${darkMode ? 'text-stone-200' : 'text-stone-850'}`}>
-                                    {center.teacherName}
-                                  </span>
-                                </div>
-                                
+                              <div className="grid grid-cols-1 gap-x-4 gap-y-5 text-xs pt-1">
                                 <div>
                                   <span className="font-bold text-stone-400 uppercase text-[9px] tracking-wide flex items-center gap-1 mb-1">
                                     <Clock className="w-3.5 h-3.5 text-amber-500" />
@@ -3042,6 +3200,30 @@ export default function App() {
           </div>
         )}
 
+        {/* --- VIEW 4: ADMIN PORTAL ACCESS GUARD --- */}
+        {activeTab === 'admin' && !isAdmin && (
+          <div className="py-20 text-center space-y-4 animate-fade-in" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+            <div className="w-16 h-16 bg-amber-500/10 text-amber-500 rounded-3xl mx-auto flex items-center justify-center">
+              <ShieldCheck className="w-8 h-8" />
+            </div>
+            <h3 className={`text-xl font-bold font-serif ${darkMode ? 'text-white' : 'text-stone-900'}`}>
+              {lang === 'ar' ? 'صلاحيات المدير مطلوبة' : 'Admin Access Required'}
+            </h3>
+            <p className={`text-xs max-w-md mx-auto leading-relaxed ${darkMode ? 'text-stone-400' : 'text-stone-500'}`}>
+              {lang === 'ar' ? 'هذه الصفحة مخصصة لمديري المنصة فقط لمراجعة واعتماد الجمعيات.' : 'This page is reserved for platform administrators to review and verify associations.'}
+            </p>
+            <div>
+              <a
+                href="/"
+                onClick={(e) => { e.preventDefault(); setActiveTab('discover'); }}
+                className="inline-block mt-3 px-6 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-medium rounded-xl text-xs transition-colors cursor-pointer no-underline"
+              >
+                {lang === 'ar' ? 'العودة للرئيسية' : 'Back to Home'}
+              </a>
+            </div>
+          </div>
+        )}
+
         {/* --- VIEW 4: ADMIN PORTAL --- */}
         {activeTab === 'admin' && isAdmin && (
           <div className="space-y-8 py-4 animate-fade-in text-start font-sans" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
@@ -3116,7 +3298,7 @@ export default function App() {
                                 {center.name}
                               </h4>
                               <p className="text-[10px] text-stone-400 font-medium mt-1 font-sans">
-                                📍 {center.city}, {center.country}
+                                📍 {center.city}, {center.country} <span className="mx-1.5">&bull;</span> <span title="Creator">👤 {getCreatorName(center.createdBy)}</span>
                               </p>
                             </div>
                             
@@ -3180,13 +3362,7 @@ export default function App() {
 
 
 
-                              {/* Submitter ID */}
-                              <div className="flex items-center justify-between text-[9px] text-stone-400">
-                                <span>{lang === 'ar' ? 'مُعرّف المسجل:' : 'Registered by:'}</span>
-                                <span className="font-mono bg-stone-100 dark:bg-stone-850 px-1 py-0.5 rounded text-[8px]">
-                                  {center.createdBy || 'System / Pre-seeded'}
-                                </span>
-                              </div>
+
                             </div>
                           )}
 
@@ -3243,7 +3419,7 @@ export default function App() {
                                 {center.name}
                               </h4>
                               <p className="text-[10px] text-stone-400 font-medium mt-1">
-                                📍 {center.city}, {center.country}
+                                📍 {center.city}, {center.country} <span className="mx-1.5">&bull;</span> <span title="Creator">👤 {getCreatorName(center.createdBy)}</span>
                               </p>
                             </div>
                             
@@ -3307,13 +3483,7 @@ export default function App() {
 
 
 
-                              {/* Submitter ID */}
-                              <div className="flex items-center justify-between text-[9px] text-stone-400">
-                                <span>{lang === 'ar' ? 'مُعرّف المسجل:' : 'Registered by:'}</span>
-                                <span className="font-mono bg-stone-100 dark:bg-stone-850 px-1 py-0.5 rounded text-[8px]">
-                                  {center.createdBy || 'System / Pre-seeded'}
-                                </span>
-                              </div>
+
                             </div>
                           )}
 
@@ -3365,9 +3535,9 @@ export default function App() {
 
           {/* Quick links */}
           <div className="flex items-center gap-4">
-            <button onClick={() => setActiveTab('discover')} className="hover:text-emerald-500 cursor-pointer">{lang === 'ar' ? 'استكشف' : 'Explore'}</button>
-            <button onClick={() => setActiveTab('host')} className="hover:text-emerald-500 cursor-pointer">{lang === 'ar' ? 'مركز المستضيف' : 'Host Hub'}</button>
-            <button onClick={() => setActiveTab('about')} className="hover:text-emerald-500 cursor-pointer">{lang === 'ar' ? 'التراث الأصيل' : 'Heritage'}</button>
+            <a href="/" onClick={(e) => { e.preventDefault(); setActiveTab('discover'); }} className="hover:text-emerald-500 cursor-pointer no-underline">{lang === 'ar' ? 'استكشف' : 'Explore'}</a>
+            <a href="/add-kottab" onClick={(e) => { e.preventDefault(); setActiveTab('host'); }} className="hover:text-emerald-500 cursor-pointer no-underline">{lang === 'ar' ? 'مركز المستضيف' : 'Host Hub'}</a>
+            <a href="/about" onClick={(e) => { e.preventDefault(); setActiveTab('about'); }} className="hover:text-emerald-500 cursor-pointer no-underline">{lang === 'ar' ? 'التراث الأصيل' : 'Heritage'}</a>
           </div>
 
           <div className="text-stone-500 dark:text-stone-400">
