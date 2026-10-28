@@ -76,14 +76,11 @@ export default function InteractiveMap({
     // Add zoom control at the top right
     L.control.zoom({ position: 'topright' }).addTo(map);
 
-    // Apply CartoDB elegant open tile maps
-    const tileUrl = darkMode
-      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
-
-    L.tileLayer(tileUrl, {
+    // Apply 100% free OpenStreetMap tiles (No API key needed)
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      className: darkMode ? 'map-tiles-dark' : ''
     }).addTo(map);
 
     return () => {

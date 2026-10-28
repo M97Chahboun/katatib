@@ -13,3 +13,6 @@
   --color-amber-850: #853e0d;
 }
 
+.map-tiles-dark {
+  filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(90%);
+}
