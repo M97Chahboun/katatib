@@ -90,15 +90,25 @@ service cloud.firestore {
 
     // --- Collection Routes ---
 
-    // 1. User Profiles - strictly isolated (PII protection)
+    // 1. User Profiles
     match /user_profiles/{userId} {
-      allow get: if isOwner(userId);
+      allow read: if true;
       allow create: if isVerifiedUser() && isOwner(userId) && isValidUserProfile(incoming()) && incoming().createdAt == request.time;
       allow update: if isVerifiedUser() && isOwner(userId) && isValidUserProfile(incoming())
                        && incoming().uid == existing().uid
                        && incoming().createdAt == existing().createdAt
                        && incoming().updatedAt == request.time;
       allow delete: if false; // profiles cannot be deleted from client
+    }
+
+    // 1.5 Stats - Global Statistics
+    match /stats/{docId} {
+      allow read: if true;
+      allow create: if false; // Only created via admin script
+      allow update: if docId == 'global' 
+                    && isVerifiedUser() 
+                    && incoming().diff(existing()).affectedKeys().hasOnly(['usersCount'])
+                    && incoming().usersCount == existing().usersCount + 1;
     }
 
     // 2. Tahfid Centers - Publicly readable, modifiable by Hosts & Admins

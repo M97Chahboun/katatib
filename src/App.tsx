@@ -1532,8 +1532,8 @@ export default function App() {
             onClick={(e) => { e.preventDefault(); setActiveTab('discover'); setSelectedCenter(null); }}
             className="flex items-center gap-2 sm:gap-3 cursor-pointer group animate-fade-in shrink-0 no-underline"
           >
-            <div className="w-10 h-10 sm:w-13 sm:h-13 bg-emerald-950 text-emerald-400 dark:text-emerald-300 rounded-2xl flex items-center justify-center shadow-md shadow-emerald-950/15 border border-emerald-800/80 group-hover:scale-105 transition-transform duration-200 p-1.5 shrink-0">
-              <Logo size={28} className="text-emerald-400 dark:text-emerald-300 sm:w-8 sm:h-8" strokeWidth={5.2} />
+            <div className="w-10 h-10 sm:w-13 sm:h-13 bg-gradient-to-br from-[#064E3B] to-[#022c22] rounded-2xl flex items-center justify-center shadow-md shadow-emerald-950/20 border border-emerald-600/50 group-hover:scale-105 group-hover:border-amber-400/80 transition-all duration-200 p-1.5 shrink-0 ring-1 ring-amber-400/30">
+              <Logo size={28} isGold className="sm:w-8 sm:h-8" strokeWidth={5.2} />
             </div>
             <div>
               <div className="flex items-center gap-1.5">
@@ -1829,9 +1829,9 @@ export default function App() {
 
                 <div className="text-center mb-6">
                   <div className={`w-18 h-18 rounded-full flex items-center justify-center mx-auto mb-3 border p-2.5 transition-all shadow-inner ${
-                    darkMode ? 'bg-stone-800 border-stone-700 text-emerald-400' : 'bg-emerald-50 border-emerald-100 text-emerald-700'
+                    darkMode ? 'bg-stone-800 border-amber-500/30' : 'bg-emerald-950 border-emerald-850'
                   }`}>
-                    <Logo size={46} className="text-emerald-600 dark:text-emerald-400" strokeWidth={5.2} />
+                    <Logo size={46} isGold strokeWidth={5.2} />
                   </div>
                   <h3 className={`text-lg font-bold font-serif tracking-tight ${darkMode ? 'text-white' : 'text-slate-900'}`}>
                     {t.onboardTitle}
@@ -2649,9 +2649,9 @@ export default function App() {
                 darkMode ? 'bg-stone-900 border-stone-800' : 'bg-white border-stone-200'
               }`}>
                 <div className={`w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-5 border p-3 transition-all ${
-                  darkMode ? 'bg-stone-850 border-stone-800 text-emerald-400' : 'bg-emerald-50 border-emerald-100 text-[#064E3B]'
+                  darkMode ? 'bg-stone-850 border-amber-500/30' : 'bg-emerald-950 border-emerald-850'
                 }`}>
-                  <Logo size={54} className="text-[#064E3B] dark:text-emerald-400" strokeWidth={5.2} />
+                  <Logo size={54} isGold strokeWidth={5.2} />
                 </div>
                 <h4 className={`text-sm font-bold font-serif ${darkMode ? 'text-white' : 'text-stone-800'}`}>{t.authRequired}</h4>
                 <p className={`text-xs mt-2 mb-6 leading-relaxed ${darkMode ? 'text-stone-400' : 'text-stone-400'}`}>

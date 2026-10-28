@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "deploy:hosting": "npm run build && npx firebase deploy --only hosting"
+    "deploy:hosting": "npm run build && npx firebase deploy --only hosting",
+    "scrape": "tsx scripts/scrapeAssociations.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -19,9 +20,11 @@
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "firebase": "^12.15.0",
+    "firebase-admin": "^14.1.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
+    "pdf-parse": "^2.4.5",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "vite": "^6.2.3"
