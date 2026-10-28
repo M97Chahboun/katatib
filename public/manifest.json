@@ -1,0 +1,17 @@
+{
+  "name": "كتاتيب - الدليل العالمي للكتاتيب ومراكز التحفيظ",
+  "short_name": "كتاتيب",
+  "description": "منصة تفاعلية عالمية لربط المسافرين بمراكز تحفيظ القرآن الكريم والكتاتيب التاريخية",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#064E3B",
+  "theme_color": "#064E3B",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

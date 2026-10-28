@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="100%" height="100%">
+  <defs>
+    <linearGradient id="katatib-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#064E3B" />
+      <stop offset="100%" stop-color="#022c22" />
+    </linearGradient>
+    <linearGradient id="gold-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FBBF24" />
+      <stop offset="100%" stop-color="#F59E0B" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded squircle with subtle border -->
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="url(#katatib-grad)" stroke="#10B981" stroke-width="2.5" />
+
+  <!-- Katatib Quranic Open Book Logo -->
+  <g transform="translate(14, 14) scale(1.0)" stroke="url(#gold-grad)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Outer Layer 3 -->
+    <path d="M 20 34 V 62 L 47 71" stroke-width="5" />
+    <path d="M 80 34 V 62 L 53 71" stroke-width="5" />
+
+    <!-- Middle Layer 2 -->
+    <path d="M 26 30 V 58 L 47 65" stroke-width="5" />
+    <path d="M 74 30 V 58 L 53 65" stroke-width="5" />
+
+    <!-- Innermost Layer 1 -->
+    <path d="M 32 26 C 38 26 44 36 50 36 C 56 36 62 26 68 26" stroke-width="5" />
+    <path d="M 32 26 V 54 L 47 59" stroke-width="5" />
+    <path d="M 68 26 V 54 L 53 59" stroke-width="5" />
+
+    <!-- Rehal Stand Feet -->
+    <path d="M 30 78 V 70 L 38 78" stroke-width="5" />
+    <path d="M 70 78 V 70 L 62 78" stroke-width="5" />
+
+    <!-- Central Rising Arrow -->
+    <path d="M 30 78 C 38 74 50 68 50 56 V 48" stroke-width="5" />
+    <path d="M 70 78 C 62 74 50 68 50 56" stroke-width="5" />
+    <path d="M 43 55 L 50 48 L 57 55" stroke-width="5" />
+  </g>
+</svg>
